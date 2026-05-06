@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>OMNI—SUPREME | XM Edition</title>
+    <title>OMNI—SIGNAL | XM Edition</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -36,19 +36,16 @@
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: var(--bg-secondary); }
         ::-webkit-scrollbar-thumb { background: var(--accent-primary); border-radius: 10px; }
-        .glass { background: rgba(15, 21, 34, 0.7); backdrop-filter: blur(12px); border: 1px solid var(--border-subtle); }
-        [data-theme="light"] .glass { background: rgba(255, 255, 255, 0.7); }
         .card { background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 24px; padding: 20px; margin-bottom: 16px; }
         .btn { background: linear-gradient(135deg, #6366f1, #4338ca); padding: 14px; border-radius: 16px; font-weight: bold; width: 100%; border: none; color: white; cursor: pointer; transition: opacity 0.2s; }
         .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .btn-secondary { background: #1e293b; }
         .signal-buy { color: #00ff88; text-shadow: 0 0 20px rgba(0,255,136,0.3); }
         .signal-sell { color: #ff4466; text-shadow: 0 0 20px rgba(255,68,102,0.3); }
         .signal-wait { color: #ffaa00; text-shadow: 0 0 20px rgba(255,170,0,0.3); }
         .input-dark { background: var(--bg-secondary); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 12px; color: var(--text-primary); width: 100%; outline: none; }
         .input-dark:focus { border-color: var(--accent-primary); }
         .badge { background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.2); border-radius: 12px; padding: 6px 12px; font-size: 11px; }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.5;} }
         .loading { animation: pulse 1.5s ease-in-out infinite; }
         .overlay { position: fixed; inset: 0; background: rgba(5,8,15,0.95); backdrop-filter: blur(8px); z-index: 1000; display: none; justify-content: center; align-items: center; flex-direction: column; }
         .drawer { position: fixed; top: 0; right: -100%; width: 320px; height: 100%; background: #0a0f1a; transition: 0.3s; z-index: 1001; border-left: 1px solid rgba(255,255,255,0.1); padding: 24px; overflow-y: auto; }
@@ -57,9 +54,8 @@
         .toast-success { background: #10b981; }
         .toast-error { background: #ef4444; }
         .toast-info { background: #6366f1; }
-        .toast-warning { background: #f59e0b; }
-        .theme-toggle { width: 40px; height: 40px; border-radius: 20px; background: var(--bg-card); border: 1px solid var(--border-subtle); cursor: pointer; display: flex; align-items: center; justify-content: center; }
         .auto-track-badge { background: rgba(16,185,129,0.2); border: 1px solid rgba(16,185,129,0.3); border-radius: 20px; padding: 4px 10px; font-size: 9px; color: #10b981; display: inline-flex; align-items: center; gap: 4px; }
+        .theme-toggle { width: 40px; height: 40px; border-radius: 20px; background: var(--bg-card); border: 1px solid var(--border-subtle); cursor: pointer; display: flex; align-items: center; justify-content: center; }
     </style>
 </head>
 <body>
@@ -80,6 +76,11 @@
             <input type="password" id="apiKey" class="input-dark text-sm mt-1" placeholder="Paste your Gemini API key">
             <p class="text-[8px] text-slate-500 mt-1">Get free from <a href="https://aistudio.google.com" target="_blank" class="text-indigo-400">aistudio.google.com</a></p>
         </div>
+        <div>
+            <label class="text-[10px] font-bold text-slate-400">📊 ALPHA VANTAGE API KEY (Optional)</label>
+            <input type="password" id="alphaKey" class="input-dark text-sm mt-1" placeholder="Paste your Alpha Vantage key">
+            <p class="text-[8px] text-slate-500 mt-1">Get free from <a href="https://alphavantage.co/support/#api-key" target="_blank" class="text-indigo-400">alphavantage.co</a></p>
+        </div>
         <div class="grid grid-cols-2 gap-3">
             <div><label class="text-[10px] font-bold text-slate-400">💰 BALANCE ($)</label><input type="number" id="balance" class="input-dark mt-1" value="10000"></div>
             <div><label class="text-[10px] font-bold text-slate-400">⚠️ RISK %</label><input type="number" id="riskPercent" class="input-dark mt-1" value="1.0" step="0.1"></div>
@@ -97,7 +98,6 @@
                 <option value="on">✅ ON - Auto detect TP/SL hits</option>
                 <option value="off">⏸️ OFF - Manual feedback only</option>
             </select>
-            <p class="text-[8px] text-slate-500 mt-1">Automatically checks price every 30 seconds</p>
         </div>
         <button id="saveSettings" class="btn text-sm py-3">SAVE & SECURE</button>
     </div>
@@ -106,7 +106,6 @@
 <div id="drawerOverlay" class="fixed inset-0 bg-black/70 z-40 hidden" onclick="closeDrawer()"></div>
 
 <div class="max-w-md mx-auto">
-    
     <!-- Header -->
     <div class="flex justify-between items-center mb-6">
         <div>
@@ -119,22 +118,30 @@
         </div>
     </div>
 
-    <!-- Symbol Selector -->
+    <!-- Symbol Selector - Full XM Watchlist -->
     <div class="card">
         <label class="text-[10px] font-bold text-slate-400">📈 SYMBOL</label>
         <div class="flex gap-2 mt-2">
             <select id="symbolSelect" class="input-dark flex-1">
-                <option value="XAUUSD">🪙 GOLD (XAUUSD)</option>
-                <option value="EURUSD">💶 EUR/USD</option>
-                <option value="GBPUSD">💷 GBP/USD</option>
-                <option value="BTCUSD">₿ BTC/USD</option>
-                <option value="ETHUSD">Ξ ETH/USD</option>
+                <optgroup label="Commodities">
+                    <option value="XAUUSD">🪙 GOLD (XAUUSD)</option>
+                    <option value="XAGUSD">🥈 SILVER (XAGUSD)</option>
+                    <option value="OILCash">🛢️ WTI OIL (OILCash)</option>
+                </optgroup>
+                <optgroup label="Forex">
+                    <option value="EURUSD">💶 EUR/USD</option>
+                    <option value="GBPUSD">💷 GBP/USD</option>
+                </optgroup>
+                <optgroup label="Cryptocurrencies">
+                    <option value="BTCUSD">₿ BTC/USD</option>
+                    <option value="ETHUSD">Ξ ETH/USD</option>
+                </optgroup>
             </select>
             <button id="analyzeBtn" class="bg-indigo-600 px-4 rounded-xl font-bold text-sm">GO</button>
         </div>
     </div>
 
-    <!-- Current Price with Auto-Track Status -->
+    <!-- Current Price -->
     <div class="card text-center">
         <div class="flex justify-between items-center mb-2">
             <p class="text-[10px] text-slate-500">CURRENT PRICE</p>
@@ -144,7 +151,7 @@
         <p id="updateTime" class="text-[8px] text-slate-600 mt-1">Waiting for data...</p>
     </div>
 
-    <!-- SIGNAL - BIG AND CLEAR -->
+    <!-- SIGNAL -->
     <div class="card text-center">
         <p class="text-[10px] text-slate-500">TRADE SIGNAL</p>
         <h1 id="signalBias" class="text-7xl font-black italic signal-wait">WAIT</h1>
@@ -154,22 +161,10 @@
     <!-- Trade Levels -->
     <div class="card">
         <div class="grid grid-cols-2 gap-3">
-            <div class="text-center p-2 bg-black/30 rounded-xl">
-                <p class="text-[8px] text-slate-500">ENTRY</p>
-                <p id="entryPrice" class="text-lg font-bold">--</p>
-            </div>
-            <div class="text-center p-2 bg-black/30 rounded-xl">
-                <p class="text-[8px] text-slate-500">STOP LOSS</p>
-                <p id="stopLoss" class="text-lg font-bold text-rose-400">--</p>
-            </div>
-            <div class="text-center p-2 bg-black/30 rounded-xl">
-                <p class="text-[8px] text-slate-500">TAKE PROFIT</p>
-                <p id="takeProfit" class="text-lg font-bold text-emerald-400">--</p>
-            </div>
-            <div class="text-center p-2 bg-black/30 rounded-xl">
-                <p class="text-[8px] text-slate-500">LOT SIZE</p>
-                <p id="lotSize" class="text-lg font-bold text-cyan-400">--</p>
-            </div>
+            <div class="text-center p-2 bg-black/30 rounded-xl"><p class="text-[8px] text-slate-500">ENTRY</p><p id="entryPrice" class="text-lg font-bold">--</p></div>
+            <div class="text-center p-2 bg-black/30 rounded-xl"><p class="text-[8px] text-slate-500">STOP LOSS</p><p id="stopLoss" class="text-lg font-bold text-rose-400">--</p></div>
+            <div class="text-center p-2 bg-black/30 rounded-xl"><p class="text-[8px] text-slate-500">TAKE PROFIT</p><p id="takeProfit" class="text-lg font-bold text-emerald-400">--</p></div>
+            <div class="text-center p-2 bg-black/30 rounded-xl"><p class="text-[8px] text-slate-500">LOT SIZE</p><p id="lotSize" class="text-lg font-bold text-cyan-400">--</p></div>
         </div>
     </div>
 
@@ -193,41 +188,37 @@
         <p id="poiLogic" class="text-[10px] text-slate-400 mt-1">Wait for price to reach this level</p>
     </div>
 
-    <!-- Open Trades Section (for feedback) -->
+    <!-- Open Trades Section -->
     <div class="card mt-4">
         <div class="flex justify-between items-center mb-3">
             <h3 class="text-sm font-black">📝 OPEN TRADES</h3>
             <span class="text-[8px] text-slate-500">Auto-tracking active</span>
         </div>
-        <div id="openTradesContainer">
-            <p class="text-center text-slate-500 text-xs py-4">No open trades. Run analysis and trade will appear here.</p>
-        </div>
+        <div id="openTradesContainer"><p class="text-center text-slate-500 text-xs py-4">No open trades.</p></div>
     </div>
 
-    <!-- Strategy Performance Section -->
+    <!-- Strategy Performance -->
     <div class="card mt-4">
         <h3 class="text-sm font-black mb-3">📊 STRATEGY PERFORMANCE</h3>
-        <div id="strategyPerformanceContainer">
-            <p class="text-center text-slate-500 text-xs py-4">Loading performance data...</p>
-        </div>
+        <div id="strategyPerformanceContainer"><p class="text-center text-slate-500 text-xs py-4">Loading...</p></div>
     </div>
 
-    <!-- Feedback History Section -->
+    <!-- Feedback History -->
     <div class="card mt-4">
         <div class="flex justify-between items-center mb-3">
             <h3 class="text-sm font-black">📜 FEEDBACK HISTORY</h3>
             <button id="clearFeedbackBtn" class="text-[8px] text-slate-500 hover:text-rose-400">Clear</button>
         </div>
-        <div id="feedbackHistoryContainer">
-            <p class="text-center text-slate-500 text-xs py-4">No feedback recorded yet.</p>
-        </div>
+        <div id="feedbackHistoryContainer"><p class="text-center text-slate-500 text-xs py-4">No feedback yet.</p></div>
     </div>
 
-    <!-- Disclaimer -->
     <p class="text-[8px] text-slate-600 text-center mt-4">⚠️ Educational only. You execute trades on XM.</p>
 </div>
 
 <script src="app.js"></script>
 <script src="feedback.js"></script>
+<script src="market-data.js"></script>
+<script src="strategy-engine.js"></script>
+<script src="risk-manager.js"></script>
 </body>
 </html>
