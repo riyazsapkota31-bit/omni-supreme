@@ -1,12 +1,10 @@
 /**
  * STRATEGY ENGINE - OPTIMIZED FOR WIN RATE (55-62% target)
- * Upgrades included: 1 (mode-based confidence), 2 (volume confirmation), 5 (choppy filter)
- * Upgrade 7 (MA crossover) omitted due to missing closes array.
+ * Uses confluence of 5 high-probability signals + strict filtering
  */
 
 const StrategyEngine = {
     
-    // Market condition filters
     marketFilters: {
         isHighImpactNews: (timestamp) => {
             const hour = new Date(timestamp).getUTCHours();
@@ -28,10 +26,9 @@ const StrategyEngine = {
             if (data.ema20 < data.ema50 && data.ema50 < data.ema200) return 'BEARISH';
             return 'SIDEWAYS';
         },
-        // Upgrade 5: Choppy market detection
         isChoppy: (data) => {
             const emaDistance = Math.abs(data.ema20 - data.ema50) / data.currentPrice;
-            return emaDistance < 0.001; // less than 0.1% separation
+            return emaDistance < 0.001;
         }
     },
     
@@ -44,7 +41,6 @@ const StrategyEngine = {
         return { signal: null, strength: 0 };
     },
     
-    // Upgrade 2: Volume confirmation added
     detectEMAPullback(data) {
         const { currentPrice, ema20, ema50, trend, volumeSpike } = data;
         const distanceToEMA20 = Math.abs(currentPrice - ema20) / currentPrice * 100;
@@ -75,7 +71,6 @@ const StrategyEngine = {
         return { signal: null, strength: 0 };
     },
     
-    // Upgrade 2: Volume confirmation added to FVG as well
     detectFVG(data) {
         const { currentPrice, ema20, ema50, volumeSpike } = data;
         const gap = Math.abs(ema20 - ema50) / ema50 * 100;
@@ -88,23 +83,12 @@ const StrategyEngine = {
     
     shouldTrade(marketData, mode) {
         const filters = this.marketFilters;
-        // Upgrade 5: reject choppy markets
-        if (filters.isChoppy(marketData)) {
-            return { allowed: false, reason: 'Market choppy - no clear direction' };
-        }
-        if (filters.isHighImpactNews(Date.now())) {
-            return { allowed: false, reason: 'Major news event' };
-        }
-        if (!filters.isVolatilityAcceptable(marketData.atr, marketData.currentPrice)) {
-            return { allowed: false, reason: 'Volatility too high' };
-        }
-        if (!filters.isSpreadAcceptable(marketData.spread, marketData.currentPrice, marketData.class)) {
-            return { allowed: false, reason: 'Spreads too wide' };
-        }
+        if (filters.isChoppy(marketData)) return { allowed: false, reason: 'Market choppy' };
+        if (filters.isHighImpactNews(Date.now())) return { allowed: false, reason: 'News event' };
+        if (!filters.isVolatilityAcceptable(marketData.atr, marketData.currentPrice)) return { allowed: false, reason: 'Volatility too high' };
+        if (!filters.isSpreadAcceptable(marketData.spread, marketData.currentPrice, marketData.class)) return { allowed: false, reason: 'Spreads too wide' };
         const trend = filters.getTrend(marketData);
-        if (mode === 'day' && trend === 'SIDEWAYS') {
-            return { allowed: false, reason: 'Sideways market' };
-        }
+        if (mode === 'day' && trend === 'SIDEWAYS') return { allowed: false, reason: 'Sideways market' };
         return { allowed: true, reason: 'All filters passed' };
     },
     
@@ -143,7 +127,6 @@ const StrategyEngine = {
             usedStrategy = activeReasons.slice(0,2).join(' + ');
         }
         
-        // Upgrade 1: Mode-based confidence threshold
         const minConfidence = (mode === 'scalp') ? 55 : 65;
         if (confidence < minConfidence) {
             bias = 'WAIT';
@@ -151,7 +134,6 @@ const StrategyEngine = {
             usedStrategy = 'Insufficient confidence';
         }
         
-        // DXY filter
         if (config.dxyData && marketData.symbol && marketData.symbol.includes('USD')) {
             const dxyStrong = config.dxyData.dxyStrength === 'STRONG';
             const dxyWeak = config.dxyData.dxyStrength === 'WEAK';
