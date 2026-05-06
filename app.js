@@ -1,5 +1,6 @@
 /**
  * OMNI-SIGNAL - Main Application (credit‑efficient auto tracking)
+ * Works with the new multi‑source market-data.js.
  */
 
 const elements = {
