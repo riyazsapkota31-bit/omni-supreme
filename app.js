@@ -1,5 +1,6 @@
 /**
- * OMNI-SIGNAL - Main Application with Auto Price Tracking
+ * OMNI-SIGNAL - Main Application
+ * Uses market-data.js with Multi-API Fallback (Alpha Vantage → Twelve Data → Binance → Yahoo)
  */
 
 // DOM Elements
@@ -46,31 +47,46 @@ function loadSettings() {
         try {
             const config = JSON.parse(saved);
             document.getElementById('apiKey').value = config.apiKey || '';
+            document.getElementById('alphaKey').value = config.alphaKey || '';
             document.getElementById('balance').value = config.balance || '10000';
             document.getElementById('riskPercent').value = config.riskPercent || '1.0';
             document.getElementById('modeSelect').value = config.mode || 'scalp';
             document.getElementById('autoTrackSelect').value = config.autoTrack || 'on';
             currentMode = config.mode || 'scalp';
+            
+            // Set Alpha Vantage key in MarketData module
+            if (typeof MarketData !== 'undefined' && config.alphaKey) {
+                MarketData.setAlphaKey(config.alphaKey);
+            }
+            
             autoTrackingEnabled = config.autoTrack !== 'off';
             updateAutoTrackStatus();
-        } catch(e) {}
+        } catch(e) { console.error('Load settings error:', e); }
     }
 }
 
 function saveSettings() {
     const config = {
         apiKey: document.getElementById('apiKey').value,
+        alphaKey: document.getElementById('alphaKey').value,
         balance: document.getElementById('balance').value,
         riskPercent: document.getElementById('riskPercent').value,
         mode: document.getElementById('modeSelect').value,
         autoTrack: document.getElementById('autoTrackSelect').value
     };
     localStorage.setItem('omni_signal_config', JSON.stringify(config));
+    
+    // Set Alpha Vantage key in MarketData module
+    if (typeof MarketData !== 'undefined' && config.alphaKey) {
+        MarketData.setAlphaKey(config.alphaKey);
+    }
+    
     currentMode = config.mode;
     autoTrackingEnabled = config.autoTrack !== 'off';
     updateAutoTrackStatus();
     closeDrawer();
-    showToast('Settings saved!', 'success');
+    showToast(`Settings saved! ${config.alphaKey ? 'Alpha Vantage key stored.' : 'No Alpha Vantage key. Using fallback APIs.'}`, 'success');
+    
     if (autoTrackingEnabled && currentTradeLevels) {
         startAutoTracking();
     } else {
@@ -133,80 +149,7 @@ function toggleTheme() {
     }
 }
 
-// Market Data
-const MarketData = {
-    async fetch(symbol) {
-        let yahooSymbol = symbol;
-        const map = { 'XAUUSD': 'GC=F', 'BTCUSD': 'BTC-USD', 'ETHUSD': 'ETH-USD' };
-        if (map[symbol]) yahooSymbol = map[symbol];
-        
-        const url = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?interval=1h&range=5d`;
-        const response = await fetch(url);
-        const data = await response.json();
-        
-        if (!data.chart?.result?.[0]) throw new Error('No data');
-        
-        const quotes = data.chart.result[0].indicators.quote[0];
-        const closes = quotes.close.filter(c => c !== null);
-        const highs = quotes.high.filter(h => h !== null);
-        const lows = quotes.low.filter(l => l !== null);
-        const currentPrice = closes[closes.length - 1];
-        
-        // Calculate RSI
-        let rsi = 50;
-        if (closes.length > 14) {
-            let gains = 0, losses = 0;
-            for (let i = closes.length - 15; i < closes.length - 1; i++) {
-                const diff = closes[i + 1] - closes[i];
-                if (diff > 0) gains += diff;
-                else losses -= diff;
-            }
-            const avgGain = gains / 14;
-            const avgLoss = losses / 14;
-            if (avgLoss > 0) rsi = 100 - (100 / (1 + (avgGain / avgLoss)));
-            else rsi = 100;
-        }
-        
-        // EMAs
-        const ema20 = closes.slice(-20).reduce((a,b) => a + b, 0) / 20;
-        const ema50 = closes.slice(-50).reduce((a,b) => a + b, 0) / 50;
-        const ema200 = closes.slice(-200).reduce((a,b) => a + b, 0) / 200;
-        
-        // Support/Resistance
-        const support = Math.min(...lows.slice(-50));
-        const resistance = Math.max(...highs.slice(-50));
-        
-        // ATR
-        let atr = 0;
-        if (highs.length > 14) {
-            let trSum = 0;
-            for (let i = highs.length - 14; i < highs.length; i++) {
-                const hl = highs[i] - lows[i];
-                const hc = Math.abs(highs[i] - closes[i-1]);
-                const lc = Math.abs(lows[i] - closes[i-1]);
-                trSum += Math.max(hl, hc, lc);
-            }
-            atr = trSum / 14;
-        } else {
-            atr = currentPrice * 0.005;
-        }
-        
-        // Trend
-        let trend = 'SIDEWAYS';
-        if (ema20 > ema50 && ema50 > ema200) trend = 'BULLISH';
-        if (ema20 < ema50 && ema50 < ema200) trend = 'BEARISH';
-        
-        return {
-            currentPrice, rsi, ema20, ema50, ema200,
-            support, resistance, atr, trend,
-            symbol, prevPrice: closes[closes.length - 2] || currentPrice,
-            spread: 0.0001, multiplier: symbol.includes('USD') ? 10000 : 1,
-            digits: symbol.includes('BTC') ? 0 : 2
-        };
-    }
-};
-
-// Signal Engine
+// Signal Engine (Simple but effective)
 const SignalEngine = {
     analyze(data, mode) {
         const { rsi, currentPrice, ema20, ema50, support, resistance, trend } = data;
@@ -215,7 +158,7 @@ const SignalEngine = {
         let confidence = 50;
         let reason = '';
         
-        // RSI signal
+        // RSI signal (primary)
         if (rsi < 30 && currentPrice > support) {
             bias = 'BUY';
             confidence = 65 + (30 - rsi);
@@ -235,12 +178,13 @@ const SignalEngine = {
             reason += ' Bearish EMA alignment.';
         } else if (bias !== 'WAIT' && ((bias === 'BUY' && ema20 < ema50) || (bias === 'SELL' && ema20 > ema50))) {
             confidence -= 20;
+            reason += ' EMA conflict.';
         }
         
         // Trend filter for day trading
         if (mode === 'day' && trend === 'SIDEWAYS' && bias !== 'WAIT') {
             confidence -= 25;
-            reason += ' Sideways market - day trading not ideal.';
+            reason += ' Sideways market - not ideal for day trading.';
         }
         
         // Confidence threshold
@@ -250,7 +194,14 @@ const SignalEngine = {
             reason = 'Insufficient confluence. Wait for better setup.';
         }
         
-        // Calculate levels
+        // Apply feedback-based adjustment if available
+        if (typeof getAdjustedConfidence === 'function') {
+            const adjusted = getAdjustedConfidence({ bias, confidence, primaryStrategy: 'Signal Confluence' });
+            confidence = adjusted;
+            if (confidence < 55) bias = 'WAIT';
+        }
+        
+        // Calculate trade levels
         let entry = null, sl = null, tp = null;
         if (bias === 'BUY') {
             entry = currentPrice;
@@ -272,7 +223,7 @@ const SignalEngine = {
     },
     
     calculateLotSize(entry, sl, balance, riskPercent) {
-        if (!entry || !sl) return 0;
+        if (!entry || !sl) return 0.01;
         const riskAmount = balance * (riskPercent / 100);
         const stopDistance = Math.abs(entry - sl);
         if (stopDistance === 0) return 0.01;
@@ -288,67 +239,38 @@ function startAutoTracking() {
     if (!autoTrackingEnabled) return;
     
     autoTrackInterval = setInterval(async () => {
-        const openTrades = window.getOpenTradesForTracking ? window.getOpenTradesForTracking() : [];
+        const openTrades = typeof getOpenTradesForTracking === 'function' ? getOpenTradesForTracking() : [];
         if (openTrades.length === 0) return;
         
         try {
+            // Use MarketData module with multi-API fallback
             const currentPriceData = await MarketData.fetch(currentSymbol);
             const price = currentPriceData.currentPrice;
             
             for (const trade of openTrades) {
                 if (trade.status !== 'OPEN') continue;
                 
-                // Check if TP hit
                 if (trade.bias === 'BUY' && price >= trade.tp) {
-                    window.recordFeedback?.(trade.id, 'WIN', 'Auto-detected: TP hit');
-                    showToast(`${trade.symbol} - TP HIT! Trade closed as WIN.`, 'success');
+                    if (typeof recordFeedback === 'function') recordFeedback(trade.id, 'WIN', 'Auto: TP hit');
+                    showToast(`${trade.symbol} - TP HIT! WIN.`, 'success');
                 }
                 else if (trade.bias === 'SELL' && price <= trade.tp) {
-                    window.recordFeedback?.(trade.id, 'WIN', 'Auto-detected: TP hit');
-                    showToast(`${trade.symbol} - TP HIT! Trade closed as WIN.`, 'success');
+                    if (typeof recordFeedback === 'function') recordFeedback(trade.id, 'WIN', 'Auto: TP hit');
+                    showToast(`${trade.symbol} - TP HIT! WIN.`, 'success');
                 }
-                // Check if SL hit
                 else if (trade.bias === 'BUY' && price <= trade.sl) {
-                    window.recordFeedback?.(trade.id, 'LOSS', 'Auto-detected: SL hit');
-                    showToast(`${trade.symbol} - SL HIT! Trade closed as LOSS.`, 'error');
+                    if (typeof recordFeedback === 'function') recordFeedback(trade.id, 'LOSS', 'Auto: SL hit');
+                    showToast(`${trade.symbol} - SL HIT! LOSS.`, 'error');
                 }
                 else if (trade.bias === 'SELL' && price >= trade.sl) {
-                    window.recordFeedback?.(trade.id, 'LOSS', 'Auto-detected: SL hit');
-                    showToast(`${trade.symbol} - SL HIT! Trade closed as LOSS.`, 'error');
-                }
-                // Check for partial TP touch (price touched TP but reversed)
-                else if (trade.bias === 'BUY' && price >= trade.tp * 0.99 && price < trade.tp) {
-                    // Track that it got close to TP
-                    if (!trade.tpAlmostHit) {
-                        trade.tpAlmostHit = true;
-                        trade.tpAlmostHitTime = Date.now();
-                    }
-                    // If it got close to TP then dropped significantly
-                    if (trade.tpAlmostHit && price < trade.entry) {
-                        window.recordFeedback?.(trade.id, 'PARTIAL', 'Auto-detected: TP almost hit then reversed');
-                        showToast(`${trade.symbol} - TP almost hit! Trade reversed to loss.`, 'warning');
-                    }
-                }
-                else if (trade.bias === 'SELL' && price <= trade.tp * 1.01 && price > trade.tp) {
-                    if (!trade.tpAlmostHit) {
-                        trade.tpAlmostHit = true;
-                        trade.tpAlmostHitTime = Date.now();
-                    }
-                    if (trade.tpAlmostHit && price > trade.entry) {
-                        window.recordFeedback?.(trade.id, 'PARTIAL', 'Auto-detected: TP almost hit then reversed');
-                        showToast(`${trade.symbol} - TP almost hit! Trade reversed to loss.`, 'warning');
-                    }
+                    if (typeof recordFeedback === 'function') recordFeedback(trade.id, 'LOSS', 'Auto: SL hit');
+                    showToast(`${trade.symbol} - SL HIT! LOSS.`, 'error');
                 }
             }
-            
-            // Save updated trades
-            window.saveFeedbackData?.();
-            window.renderOpenTrades?.();
-            
         } catch (e) {
             console.log('Auto-track error:', e);
         }
-    }, 30000); // Check every 30 seconds
+    }, 30000);
 }
 
 function stopAutoTracking() {
@@ -358,7 +280,26 @@ function stopAutoTracking() {
     }
 }
 
-// Main Analysis
+// Gemini Explanation (optional)
+async function getGeminiExplanation(apiKey) {
+    if (!apiKey) return null;
+    const prompt = `Explain this trade signal in 10-15 words: ${currentSymbol} price ${currentData?.currentPrice}. RSI ${currentData?.rsi?.toFixed(1)}. Signal: ${currentSignal?.bias} with ${currentSignal?.confidence}% confidence.`;
+    
+    try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { temperature: 0.1, maxOutputTokens: 60 }
+            })
+        });
+        const result = await response.json();
+        return result.candidates?.[0]?.content?.parts?.[0]?.text || null;
+    } catch(e) { return null; }
+}
+
+// Main Analysis Function - USES MarketData MODULE WITH MULTI-API FALLBACK
 async function analyze() {
     const apiKey = document.getElementById('apiKey').value;
     if (!apiKey) {
@@ -368,24 +309,31 @@ async function analyze() {
     }
     
     showLoading(true);
+    elements.logicText.textContent = "Fetching market data using multi-API fallback...";
     
     try {
         currentSymbol = elements.symbolSelect.value;
+        
+        // THIS USES YOUR market-data.js WITH MULTI-API FALLBACK
+        // Priority: Alpha Vantage (if key set) → Twelve Data → Binance → Yahoo
         currentData = await MarketData.fetch(currentSymbol);
         
-        elements.currentPrice.textContent = currentData.currentPrice.toFixed(2);
+        if (!currentData) {
+            throw new Error('All APIs failed. Check your connection.');
+        }
+        
+        // Display data source used
+        const dataSource = currentData._source || 'Unknown';
+        const dataDelay = currentData._realtime ? ' (Real-time)' : (currentData._delayed ? ' (Delayed)' : '');
+        elements.logicText.innerHTML = `📡 Data: ${dataSource}${dataDelay}`;
+        
+        elements.currentPrice.textContent = currentData.currentPrice.toFixed(currentData.digits || 2);
         elements.updateTime.textContent = `Updated: ${new Date().toLocaleTimeString()}`;
         
         const balance = parseFloat(document.getElementById('balance').value);
         const riskPercent = parseFloat(document.getElementById('riskPercent').value);
         
         currentSignal = SignalEngine.analyze(currentData, currentMode);
-        
-        // Apply adjusted confidence from feedback system if available
-        if (typeof getAdjustedConfidence === 'function') {
-            const adjustedConf = getAdjustedConfidence(currentSignal);
-            currentSignal.confidence = adjustedConf;
-        }
         
         // Display signal
         elements.signalBias.textContent = currentSignal.bias;
@@ -395,7 +343,6 @@ async function analyze() {
         }`;
         elements.confidenceText.textContent = `${currentSignal.confidence}% confidence`;
         
-        // Calculate trade levels
         if (currentSignal.bias !== 'WAIT' && currentSignal.entry && currentSignal.sl && currentSignal.tp) {
             currentTradeLevels = {
                 entry: currentSignal.entry,
@@ -403,9 +350,9 @@ async function analyze() {
                 takeProfit: currentSignal.tp
             };
             
-            elements.entryPrice.textContent = currentSignal.entry.toFixed(5);
-            elements.stopLoss.textContent = currentSignal.sl.toFixed(5);
-            elements.takeProfit.textContent = currentSignal.tp.toFixed(5);
+            elements.entryPrice.textContent = currentSignal.entry.toFixed(currentData.digits || 5);
+            elements.stopLoss.textContent = currentSignal.sl.toFixed(currentData.digits || 5);
+            elements.takeProfit.textContent = currentSignal.tp.toFixed(currentData.digits || 5);
             
             const lotSize = SignalEngine.calculateLotSize(currentSignal.entry, currentSignal.sl, balance, riskPercent);
             elements.lotSize.textContent = lotSize.toFixed(2);
@@ -423,22 +370,12 @@ async function analyze() {
                 addOpenTrade(currentSignal, currentData, currentTradeLevels);
             }
             
-            // Start auto tracking if enabled
-            if (autoTrackingEnabled) {
-                startAutoTracking();
-            }
+            if (autoTrackingEnabled) startAutoTracking();
             
-            // Get Gemini explanation
-            try {
-                const explanation = await getGeminiExplanation(apiKey);
-                if (explanation) {
-                    elements.logicText.innerHTML = `<span class="text-cyan-400">🎯 ${currentSignal.bias}</span><br>${explanation}`;
-                } else {
-                    elements.logicText.innerHTML = `<span class="text-cyan-400">🎯 ${currentSignal.bias}</span><br>${currentSignal.reason}`;
-                }
-            } catch(e) {
-                elements.logicText.innerHTML = `<span class="text-cyan-400">🎯 ${currentSignal.bias}</span><br>${currentSignal.reason}`;
-            }
+            // Optional Gemini explanation
+            const geminiText = await getGeminiExplanation(apiKey);
+            elements.logicText.innerHTML = `<span class="text-cyan-400">🎯 ${currentSignal.bias}</span><br>${geminiText || currentSignal.reason}`;
+            
         } else {
             elements.entryPrice.textContent = '--';
             elements.stopLoss.textContent = '--';
@@ -446,10 +383,9 @@ async function analyze() {
             elements.lotSize.textContent = '--';
             elements.rrValue.textContent = '0:0';
             
-            // Show POI for WAIT
             const poi = currentData.currentPrice;
-            elements.poiLevel.textContent = poi.toFixed(2);
-            elements.poiLogic.textContent = currentSignal.reason || 'No clear setup. Wait for price action.';
+            elements.poiLevel.textContent = poi.toFixed(currentData.digits || 2);
+            elements.poiLogic.textContent = currentSignal.reason;
             elements.poiBox.classList.remove('hidden');
             elements.logicText.innerHTML = `<span class="text-amber-400">⏸️ WAIT MODE</span><br>${currentSignal.reason}`;
         }
@@ -457,27 +393,11 @@ async function analyze() {
     } catch (error) {
         console.error(error);
         elements.signalBias.textContent = 'ERROR';
-        elements.logicText.textContent = `Failed: ${error.message}`;
-        showToast('Data fetch failed. Check internet.', 'error');
+        elements.logicText.textContent = `All APIs failed: ${error.message}. Check connection.`;
+        showToast('Data fetch failed. Multiple APIs attempted.', 'error');
     } finally {
         showLoading(false);
     }
-}
-
-async function getGeminiExplanation(apiKey) {
-    const prompt = `Explain this trade signal in 10-15 words: ${currentSymbol} price ${currentData.currentPrice}. RSI ${currentData.rsi.toFixed(1)}. Signal: ${currentSignal.bias} with ${currentSignal.confidence}% confidence. ${currentSignal.reason}`;
-    
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { temperature: 0.1, maxOutputTokens: 60 }
-        })
-    });
-    
-    const result = await response.json();
-    return result.candidates?.[0]?.content?.parts?.[0]?.text || null;
 }
 
 // Event Listeners
@@ -497,16 +417,15 @@ function init() {
         if (typeof renderOpenTrades === 'function') renderOpenTrades();
         if (typeof renderFeedbackHistory === 'function') renderFeedbackHistory();
         if (typeof updateStrategyPerformance === 'function') updateStrategyPerformance();
-        if (typeof loadFeedbackData === 'function') loadFeedbackData();
         
-        // Set win rate display
         const winRateEl = document.getElementById('winRateDisplay');
         if (winRateEl && typeof getCurrentWinRate === 'function') {
             const rate = getCurrentWinRate();
             winRateEl.textContent = `${rate}%`;
-            winRateEl.className = rate >= 55 ? 'text-emerald-400' : (rate >= 45 ? 'text-yellow-400' : 'text-rose-400');
         }
     }, 100);
+    
+    showToast('App ready. Multi-API fallback active. Alpha Vantage key ' + (alphaVantageKey ? '✅ set' : '❌ not set'), 'info');
 }
 
 // Start app
