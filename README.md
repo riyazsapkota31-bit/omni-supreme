@@ -229,7 +229,7 @@ More symbols can be added by modifying the dropdown in index.html
 
 Trading Modes:
 - Scalping: Risk:Reward 1:1.5 to 1:4 | Best for fast moves, lower timeframes | Min confidence 65%
-- Day Trading: Risk:Reward 1:2 to 1:5 | Best for trend following, 1H-4H charts | Min confidence 70%
+- Day Trading: Risk:Reward 1:4 to 1:10 | Best for trend following, 1H-4H charts | Min confidence 70%
 
 Default Strategy Parameters:
 - RSI: Period 14, Signal Buy < 30, Sell > 70
