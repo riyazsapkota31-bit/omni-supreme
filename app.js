@@ -1,5 +1,6 @@
 /**
  * OMNI-SIGNAL - Main Application (credit‑efficient auto tracking)
+ * Supports all XM assets: XAUUSD, XAGUSD, OILCash, EURUSD, GBPUSD, BTCUSD, ETHUSD
  */
 
 const elements = {
