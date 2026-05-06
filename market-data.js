@@ -1,8 +1,8 @@
 /**
- * MARKET DATA FETCHER – Alpha Vantage (primary) + optional Twelve Data WebSocket (real‑time)
- * - Alpha Vantage REST always works (via CORS proxy)
- * - Twelve Data WebSocket adds real‑time prices for XAUUSD, XAGUSD, OILCash if key is valid
- * - No Twelve Data REST calls – avoids 404 errors
+ * MARKET DATA FETCHER – Alpha Vantage (primary) with full indicators + optional WebSocket
+ * - Fetches daily time series to calculate RSI, EMAs, support/resistance
+ * - Uses current price from latest quote
+ * - Twelve Data WebSocket overrides price only (optional)
  */
 
 const MarketData = {
@@ -29,7 +29,6 @@ const MarketData = {
     setTwelveKey(key) { this.twelveKey = key; localStorage.setItem('twelve_data_key', key); },
     getTwelveKey() { if (!this.twelveKey) this.twelveKey = localStorage.getItem('twelve_data_key'); return this.twelveKey; },
 
-    // CORS proxy for Alpha Vantage (and Yahoo fallback)
     async fetchWithProxy(url) {
         const proxy = 'https://corsproxy.io/?';
         const resp = await fetch(proxy + encodeURIComponent(url));
@@ -37,103 +36,156 @@ const MarketData = {
         return resp.json();
     },
 
-    // ---- Alpha Vantage REST (primary data source) ----
-    async fetchFromAlphaVantage(symbol) {
+    // ---- Fetch historical daily prices and calculate indicators ----
+    async fetchHistoricalData(symbol) {
         const key = this.getAlphaKey();
         if (!key) throw new Error('No Alpha Vantage key');
+        // Use DAILY adjusted (or DAILY) – free tier allows 5 calls/min
+        const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${symbol}&outputsize=compact&apikey=${key}`;
+        const data = await this.fetchWithProxy(url);
+        const timeSeries = data['Time Series (Daily)'];
+        if (!timeSeries) throw new Error('No daily data');
+        const dates = Object.keys(timeSeries).sort(); // oldest first
+        const closes = dates.map(d => parseFloat(timeSeries[d]['4. close']));
+        return closes;
+    },
+
+    // ---- Calculate RSI from array of prices ----
+    calcRSI(closes, period = 14) {
+        if (closes.length < period + 1) return 50;
+        let gains = 0, losses = 0;
+        for (let i = closes.length - period; i < closes.length - 1; i++) {
+            const diff = closes[i+1] - closes[i];
+            if (diff > 0) gains += diff;
+            else losses -= diff;
+        }
+        const avgGain = gains / period;
+        const avgLoss = losses / period;
+        if (avgLoss === 0) return 100;
+        const rs = avgGain / avgLoss;
+        return 100 - (100 / (1 + rs));
+    },
+
+    calcEMA(prices, period) {
+        if (prices.length < period) return prices[prices.length-1];
+        const k = 2 / (period + 1);
+        let ema = prices.slice(0, period).reduce((a,b) => a+b,0)/period;
+        for (let i = period; i < prices.length; i++) {
+            ema = prices[i] * k + ema * (1 - k);
+        }
+        return ema;
+    },
+
+    // ---- Fetch current quote (price) ----
+    async fetchCurrentQuote(symbol) {
+        const key = this.getAlphaKey();
         const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${key}`;
         const data = await this.fetchWithProxy(url);
         const quote = data['Global Quote'];
-        if (!quote || !quote['05. price']) throw new Error('No price');
-        const price = parseFloat(quote['05. price']);
+        if (!quote || !quote['05. price']) throw new Error('No quote');
         return {
-            currentPrice: price,
+            price: parseFloat(quote['05. price']),
             prevClose: parseFloat(quote['08. previous close']),
-            dailyChange: parseFloat(quote['10. change percent']?.replace('%', '') || '0'),
-            high24h: price * 1.005,
-            low24h: price * 0.995,
-            volumeSpike: false,
-            rsi: 50,
-            atr: price * 0.001,
-            ema20: price,
-            ema50: price,
-            ema200: price,
-            support: price * 0.998,
-            resistance: price * 1.002,
-            trend: 'SIDEWAYS',
-            volatility: 0.3,
-            _source: 'Alpha Vantage'
+            changePercent: parseFloat(quote['10. change percent']?.replace('%', '') || '0')
         };
     },
 
-    // ---- Yahoo fallback (if Alpha Vantage fails) ----
-    async fetchFromYahoo(symbol) {
-        const yahooMap = {
-            'XAUUSD': 'GC=F', 'XAGUSD': 'SI=F', 'OILCash': 'CL=F',
-            'EURUSD': 'EURUSD=X', 'GBPUSD': 'GBPUSD=X',
-            'BTCUSD': 'BTC-USD', 'ETHUSD': 'ETH-USD'
-        };
-        const yahooSym = yahooMap[symbol];
-        if (!yahooSym) throw new Error('No Yahoo symbol');
-        const directUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSym}?interval=1h&range=2d`;
-        const data = await this.fetchWithProxy(directUrl);
-        const result = data.chart?.result?.[0];
-        if (!result) throw new Error('No chart data');
-        const quotes = result.indicators.quote[0];
-        const closes = quotes.close.filter(c => c !== null);
-        if (!closes.length) throw new Error('No price');
-        const current = closes[closes.length-1];
-        return {
-            currentPrice: current,
-            prevClose: closes[closes.length-2] || current,
-            dailyChange: ((current - closes[0]) / closes[0]) * 100,
-            high24h: current * 1.01,
-            low24h: current * 0.99,
-            volumeSpike: false,
-            rsi: 50,
-            atr: current * 0.005,
-            ema20: current,
-            ema50: current,
-            ema200: current,
-            support: current * 0.99,
-            resistance: current * 1.01,
-            trend: 'SIDEWAYS',
-            volatility: 0.5,
-            _source: 'Yahoo (fallback)'
-        };
-    },
-
-    // ---- Main REST fetch (cached, 60 seconds) ----
-    async fetchRest(xmSymbol) {
+    // ---- Main fetch (combines historical indicators + current price) ----
+    async fetch(xmSymbol) {
         const info = this.assetInfo[xmSymbol];
         if (!info) return null;
 
-        const cached = this.restCache[xmSymbol];
+        const cacheKey = xmSymbol;
+        const cached = this.restCache[cacheKey];
         if (cached && (Date.now() - cached.ts) < 60000) return cached.data;
 
-        let data = null;
-        if (this.getAlphaKey()) {
-            try {
-                data = await this.fetchFromAlphaVantage(xmSymbol);
-                if (data) {
-                    data = { ...data, ...info };
-                    this.restCache[xmSymbol] = { data, ts: Date.now() };
-                    return data;
-                }
-            } catch(e) { console.warn('Alpha Vantage failed', e); }
-        }
         try {
-            data = await this.fetchFromYahoo(xmSymbol);
-            if (data) {
-                data = { ...data, ...info };
-                this.restCache[xmSymbol] = { data, ts: Date.now() };
-                return data;
+            // Get historical closes for indicators (only for commodities and forex – for crypto we can skip or use same)
+            let closes = [];
+            if (xmSymbol === 'XAUUSD' || xmSymbol === 'XAGUSD' || xmSymbol === 'OILCash' ||
+                xmSymbol === 'EURUSD' || xmSymbol === 'GBPUSD') {
+                closes = await this.fetchHistoricalData(xmSymbol);
+            } else {
+                // For crypto, we'll use a simple fallback (or you can add Binance later)
+                closes = [];
             }
-        } catch(e) { console.warn('Yahoo failed', e); }
-        return null;
+            
+            // Get current quote
+            const quote = await this.fetchCurrentQuote(xmSymbol);
+            const currentPrice = quote.price;
+
+            let rsi = 50, ema20 = currentPrice, ema50 = currentPrice, ema200 = currentPrice;
+            let support = currentPrice * 0.99, resistance = currentPrice * 1.01;
+            let trend = 'SIDEWAYS', atr = currentPrice * 0.005, volatility = 0.5;
+
+            if (closes.length >= 50) {
+                // Calculate indicators from historical data
+                rsi = this.calcRSI(closes);
+                ema20 = this.calcEMA(closes, 20);
+                ema50 = this.calcEMA(closes, 50);
+                ema200 = this.calcEMA(closes, 200);
+                support = Math.min(...closes.slice(-50)) * 0.998;
+                resistance = Math.max(...closes.slice(-50)) * 1.002;
+                if (ema20 > ema50 && ema50 > ema200) trend = 'BULLISH';
+                else if (ema20 < ema50 && ema50 < ema200) trend = 'BEARISH';
+                else trend = 'SIDEWAYS';
+                // Simple ATR approximation using daily range (not perfect but enough)
+                atr = (Math.max(...closes.slice(-14)) - Math.min(...closes.slice(-14))) / 14;
+                volatility = (atr / currentPrice) * 100;
+            }
+
+            const result = {
+                currentPrice,
+                prevClose: quote.prevClose,
+                dailyChange: quote.changePercent,
+                high24h: currentPrice * 1.005,
+                low24h: currentPrice * 0.995,
+                volumeSpike: false,
+                rsi,
+                atr,
+                ema20,
+                ema50,
+                ema200,
+                support,
+                resistance,
+                trend,
+                volatility,
+                ...info,
+                _source: 'Alpha Vantage (with indicators)'
+            };
+            this.restCache[cacheKey] = { data: result, ts: Date.now() };
+            return result;
+        } catch (err) {
+            console.warn('Alpha Vantage historical fetch failed:', err);
+            // Fallback to simple quote (no indicators) but still try to give a signal
+            try {
+                const quote = await this.fetchCurrentQuote(xmSymbol);
+                return {
+                    currentPrice: quote.price,
+                    prevClose: quote.prevClose,
+                    dailyChange: quote.changePercent,
+                    high24h: quote.price * 1.005,
+                    low24h: quote.price * 0.995,
+                    volumeSpike: false,
+                    rsi: 50,
+                    atr: quote.price * 0.001,
+                    ema20: quote.price,
+                    ema50: quote.price,
+                    ema200: quote.price,
+                    support: quote.price * 0.998,
+                    resistance: quote.price * 1.002,
+                    trend: 'SIDEWAYS',
+                    volatility: 0.3,
+                    ...info,
+                    _source: 'Alpha Vantage (price only)'
+                };
+            } catch(e) {
+                return null;
+            }
+        }
     },
 
-    // ---- Twelve Data WebSocket (real‑time) ----
+    // ---- WebSocket for real‑time price override (optional) ----
     initWebSocket() {
         const key = this.getTwelveKey();
         if (!key) return;
@@ -168,13 +220,10 @@ const MarketData = {
         return null;
     },
 
-    // ---- Public fetch (used by app.js) ----
-    async fetch(xmSymbol) {
-        // Get base data from REST
-        let data = await this.fetchRest(xmSymbol);
+    // ---- Final fetch used by app.js (with optional WebSocket override) ----
+    async fetchRealtime(xmSymbol) {
+        let data = await this.fetch(xmSymbol);
         if (!data) return null;
-
-        // If it's a real‑time symbol and WebSocket is connected, override price
         if (this.wsConnected && (xmSymbol === 'XAUUSD' || xmSymbol === 'XAGUSD' || xmSymbol === 'OILCash')) {
             const wsPrice = await this.getRealtimePrice(xmSymbol);
             if (wsPrice) {
@@ -186,7 +235,7 @@ const MarketData = {
     },
 
     async fetchPriceForTracking(symbol) {
-        const data = await this.fetch(symbol);
+        const data = await this.fetchRealtime(symbol);
         return data ? data.currentPrice : null;
     },
 
@@ -194,48 +243,9 @@ const MarketData = {
         return { dxyPrice: 0, dxyTrend: 'NEUTRAL', dxyStrength: 'NEUTRAL' };
     },
 
-    // Technical indicators (simple versions – app.js uses StrategyEngine, these are fallbacks)
-    calcRSI(prices, period) {
-        if (prices.length < period + 1) return 50;
-        let gains = 0, losses = 0;
-        for (let i = prices.length - period; i < prices.length - 1; i++) {
-            const diff = prices[i+1] - prices[i];
-            if (diff > 0) gains += diff;
-            else losses -= diff;
-        }
-        const avgGain = gains / period;
-        const avgLoss = losses / period;
-        if (avgLoss === 0) return 100;
-        const rs = avgGain / avgLoss;
-        return 100 - (100 / (1 + rs));
-    },
-
-    calcATR(highs, lows, closes, period) {
-        if (highs.length < period) return (highs[highs.length-1] - lows[highs.length-1]) / 2;
-        let trs = [];
-        for (let i = highs.length - period; i < highs.length; i++) {
-            const hl = highs[i] - lows[i];
-            const hc = Math.abs(highs[i] - closes[i-1]);
-            const lc = Math.abs(lows[i] - closes[i-1]);
-            trs.push(Math.max(hl, hc, lc));
-        }
-        return trs.reduce((a,b) => a+b,0) / period;
-    },
-
-    calcEMA(prices, period) {
-        if (prices.length < period) return prices[prices.length-1];
-        const k = 2 / (period + 1);
-        let ema = prices.slice(0, period).reduce((a,b) => a+b,0) / period;
-        for (let i = period; i < prices.length; i++) ema = prices[i] * k + ema * (1 - k);
-        return ema;
-    },
-
-    determineTrend(prices) {
-        const ema20 = this.calcEMA(prices, 20);
-        const ema50 = this.calcEMA(prices, 50);
-        if (ema20 > ema50) return 'BULLISH';
-        if (ema20 < ema50) return 'BEARISH';
-        return 'SIDEWAYS';
+    // Keep old method signatures for compatibility
+    async fetch(symbol) {
+        return this.fetchRealtime(symbol);
     }
 };
 
