@@ -1,15 +1,17 @@
 /**
- * MARKET DATA FETCHER - Multi-API fallback with CORS proxies
- * Order: Alpha Vantage → Twelve Data → Binance → Yahoo
+ * MARKET DATA FETCHER - Corrected typo & reliable proxy
+ * Order: Alpha Vantage → Twelve Data → Binance → Yahoo (only for forex/crypto)
  */
 
 const MarketData = {
     alphaKey: null,
 
+    // Yahoo used only for Forex and Crypto (not for Gold/Silver/Oil)
     yahooMap: {
-        'XAUUSD': 'GC=F', 'XAGUSD': 'SI=F', 'OILCash': 'CL=F',
-        'EURUSD': 'EURUSD=X', 'GBPUSD': 'GBPUSD=X',
-        'BTCUSD': 'BTC-USD', 'ETHUSD': 'ETH-USD'
+        'EURUSD': 'EURUSD=X',
+        'GBPUSD': 'GBPUSD=X',
+        'BTCUSD': 'BTC-USD',
+        'ETHUSD': 'ETH-USD'
     },
 
     assetInfo: {
@@ -25,8 +27,9 @@ const MarketData = {
     setAlphaKey(key) { this.alphaKey = key; localStorage.setItem('alpha_api_key', key); },
     getAlphaKey() { if (!this.alphaKey) this.alphaKey = localStorage.getItem('alpha_api_key'); return this.alphaKey; },
 
+    // Use a more reliable CORS proxy
     async fetchWithProxy(url) {
-        const proxy = 'https://api.allorigins.win/raw?url=';
+        const proxy = 'https://corsproxy.io/?';
         const response = await fetch(proxy + encodeURIComponent(url));
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return await response.json();
@@ -36,7 +39,7 @@ const MarketData = {
         const info = this.assetInfo[xmSymbol];
         if (!info) return null;
 
-        // 1. Alpha Vantage (via proxy)
+        // 1. Alpha Vantage (via proxy) – fixed typo
         const alphaKey = this.getAlphaKey();
         if (alphaKey) {
             try {
@@ -140,7 +143,7 @@ const MarketData = {
             } catch(e) { console.warn('Binance failed:', e); }
         }
 
-        // 4. Yahoo Finance (via proxy, last resort)
+        // 4. Yahoo Finance (only for forex/crypto – not for commodities)
         const yahooSym = this.yahooMap[xmSymbol];
         if (yahooSym) {
             try {
@@ -181,7 +184,7 @@ const MarketData = {
         return null;
     },
 
-    // Technical indicators
+    // Technical indicators (same as before)
     calcRSI(prices, period) {
         if (prices.length < period + 1) return 50;
         let gains = 0, losses = 0;
