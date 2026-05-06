@@ -32,180 +32,36 @@
             --text-secondary: #4a5568;
         }
         
-        body {
-            background: var(--bg-primary);
-            color: var(--text-primary);
-            font-family: 'Inter', sans-serif;
-            overflow-x: hidden;
-            transition: all 0.3s ease;
-        }
-        
+        body { background: var(--bg-primary); color: var(--text-primary); font-family: 'Inter', sans-serif; overflow-x: hidden; transition: all 0.3s ease; }
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: var(--bg-secondary); }
         ::-webkit-scrollbar-thumb { background: var(--accent-primary); border-radius: 10px; }
-        
-        .glass {
-            background: rgba(15, 21, 34, 0.7);
-            backdrop-filter: blur(12px);
-            border: 1px solid var(--border-subtle);
-        }
-        
-        [data-theme="light"] .glass {
-            background: rgba(255, 255, 255, 0.7);
-        }
-        
-        .glass-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border-subtle);
-            border-radius: 2rem;
-        }
-        
-        .mode-toggle {
-            position: relative;
-            background: var(--bg-secondary);
-            border-radius: 3rem;
-            padding: 4px;
-        }
-        
-        .mode-option {
-            padding: 0.75rem 2rem;
-            border-radius: 2.5rem;
-            font-weight: 800;
-            font-size: 0.7rem;
-            letter-spacing: 0.1em;
-            text-transform: uppercase;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            color: var(--text-secondary);
-        }
-        
-        .mode-option.active {
-            background: linear-gradient(135deg, var(--accent-primary), #4338ca);
-            color: white;
-            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
-        }
-        
+        .glass { background: rgba(15, 21, 34, 0.7); backdrop-filter: blur(12px); border: 1px solid var(--border-subtle); }
+        [data-theme="light"] .glass { background: rgba(255, 255, 255, 0.7); }
+        .glass-card { background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 2rem; }
+        .mode-toggle { position: relative; background: var(--bg-secondary); border-radius: 3rem; padding: 4px; }
+        .mode-option { padding: 0.75rem 2rem; border-radius: 2.5rem; font-weight: 800; font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; transition: all 0.3s ease; color: var(--text-secondary); }
+        .mode-option.active { background: linear-gradient(135deg, var(--accent-primary), #4338ca); color: white; box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3); }
         .signal-buy { color: var(--accent-buy); text-shadow: 0 0 20px rgba(0,255,136,0.3); }
         .signal-sell { color: var(--accent-sell); text-shadow: 0 0 20px rgba(255,68,102,0.3); }
         .signal-wait { color: var(--accent-wait); text-shadow: 0 0 20px rgba(255,170,0,0.3); }
-        
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
         .loading-pulse { animation: pulse 1.5s ease-in-out infinite; }
-        
-        @keyframes slideIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
+        @keyframes slideIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
         .slide-in { animation: slideIn 0.3s ease-out; }
-        
-        #loadingOverlay {
-            position: fixed;
-            inset: 0;
-            background: rgba(5, 8, 15, 0.95);
-            backdrop-filter: blur(8px);
-            z-index: 1000;
-            display: none;
-            justify-content: center;
-            align-items: center;
-            flex-direction: column;
-        }
-        
-        .input-dark {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-subtle);
-            border-radius: 1rem;
-            padding: 0.75rem 1rem;
-            color: var(--text-primary);
-            outline: none;
-            transition: all 0.2s;
-        }
-        
-        .input-dark:focus {
-            border-color: var(--accent-primary);
-            box-shadow: 0 0 10px rgba(99,102,241,0.2);
-        }
-        
-        .metric-badge {
-            background: rgba(99,102,241,0.1);
-            border: 1px solid rgba(99,102,241,0.2);
-            border-radius: 1rem;
-            padding: 0.5rem 0.75rem;
-            font-size: 0.7rem;
-            font-weight: 600;
-        }
-        
-        .xm-symbol-card {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-subtle);
-            border-radius: 1rem;
-            padding: 0.75rem;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        
-        .xm-symbol-card:hover {
-            border-color: var(--accent-primary);
-            transform: translateY(-2px);
-        }
-        
-        .xm-symbol-card.active {
-            border-color: var(--accent-primary);
-            background: rgba(99,102,241,0.1);
-        }
-        
-        .multi-chart-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-            gap: 0.75rem;
-            margin-top: 1rem;
-        }
-        
-        .backtest-item {
-            background: var(--bg-secondary);
-            border-radius: 1rem;
-            padding: 0.75rem;
-            margin-bottom: 0.5rem;
-            font-size: 0.75rem;
-        }
-        
-        .theme-toggle {
-            width: 40px;
-            height: 40px;
-            border-radius: 20px;
-            background: var(--bg-card);
-            border: 1px solid var(--border-subtle);
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.3s;
-        }
-        
-        .toast {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background: var(--accent-primary);
-            color: white;
-            padding: 12px 20px;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: bold;
-            z-index: 1100;
-            animation: slideIn 0.3s ease-out;
-        }
-        
-        .remove-symbol {
-            opacity: 0.6;
-            transition: opacity 0.2s;
-        }
-        
-        .remove-symbol:hover {
-            opacity: 1;
-        }
+        #loadingOverlay { position: fixed; inset: 0; background: rgba(5, 8, 15, 0.95); backdrop-filter: blur(8px); z-index: 1000; display: none; justify-content: center; align-items: center; flex-direction: column; }
+        .input-dark { background: var(--bg-secondary); border: 1px solid var(--border-subtle); border-radius: 1rem; padding: 0.75rem 1rem; color: var(--text-primary); outline: none; transition: all 0.2s; }
+        .input-dark:focus { border-color: var(--accent-primary); box-shadow: 0 0 10px rgba(99,102,241,0.2); }
+        .metric-badge { background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.2); border-radius: 1rem; padding: 0.5rem 0.75rem; font-size: 0.7rem; font-weight: 600; }
+        .xm-symbol-card { background: var(--bg-secondary); border: 1px solid var(--border-subtle); border-radius: 1rem; padding: 0.75rem; cursor: pointer; transition: all 0.2s; }
+        .xm-symbol-card:hover { border-color: var(--accent-primary); transform: translateY(-2px); }
+        .xm-symbol-card.active { border-color: var(--accent-primary); background: rgba(99,102,241,0.1); }
+        .multi-chart-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 0.75rem; margin-top: 1rem; }
+        .backtest-item { background: var(--bg-secondary); border-radius: 1rem; padding: 0.75rem; margin-bottom: 0.5rem; font-size: 0.75rem; }
+        .theme-toggle { width: 40px; height: 40px; border-radius: 20px; background: var(--bg-card); border: 1px solid var(--border-subtle); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.3s; }
+        .toast { position: fixed; bottom: 20px; right: 20px; background: var(--accent-primary); color: white; padding: 12px 20px; border-radius: 12px; font-size: 12px; font-weight: bold; z-index: 1100; animation: slideIn 0.3s ease-out; }
+        .remove-symbol { opacity: 0.6; transition: opacity 0.2s; }
+        .remove-symbol:hover { opacity: 1; }
     </style>
 </head>
 <body class="p-4 md:p-8">
@@ -230,12 +86,8 @@
                 </p>
             </div>
             <div class="flex gap-3">
-                <button id="themeToggle" class="theme-toggle">
-                    <i class="fa-solid fa-moon text-slate-400 text-xl"></i>
-                </button>
-                <button id="settingsBtn" class="w-12 h-12 glass rounded-2xl flex items-center justify-center hover:bg-white/5 transition-all">
-                    <i class="fa-solid fa-sliders-h text-slate-400 text-xl"></i>
-                </button>
+                <button id="themeToggle" class="theme-toggle"><i class="fa-solid fa-moon text-slate-400 text-xl"></i></button>
+                <button id="settingsBtn" class="w-12 h-12 glass rounded-2xl flex items-center justify-center hover:bg-white/5 transition-all"><i class="fa-solid fa-sliders-h text-slate-400 text-xl"></i></button>
             </div>
         </header>
 
@@ -244,86 +96,41 @@
                 <div id="modeScalp" class="mode-option flex-1 text-center active">⚡ SCALPING</div>
                 <div id="modeDay" class="mode-option flex-1 text-center">📊 DAY TRADING</div>
             </div>
-            <p id="modeDescription" class="text-center text-xs text-slate-500 mt-3">
-                Aggressive setups | 1:1.5 to 1:4 RR | Lower-Medium Risk
-            </p>
+            <p id="modeDescription" class="text-center text-xs text-slate-500 mt-3">Aggressive setups | 1:1.5 to 1:4 RR | Lower-Medium Risk</p>
         </div>
 
-        <!-- XM Watchlist - Your exact symbols -->
         <div class="glass-card p-5 mb-8">
             <div class="flex justify-between items-center mb-4">
                 <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider">📊 XM WATCHLIST</label>
                 <button id="addXmSymbolBtn" class="text-[10px] text-indigo-400 hover:text-indigo-300">+ Add XM Symbol</button>
             </div>
-            <div id="xmWatchlistContainer" class="multi-chart-grid">
-                <!-- Will be populated dynamically -->
-            </div>
+            <div id="xmWatchlistContainer" class="multi-chart-grid"></div>
         </div>
 
         <div class="mb-4 flex justify-between items-center">
-            <div>
-                <span class="text-[9px] text-slate-500 uppercase tracking-wider">Currently Analyzing</span>
-                <h3 id="currentSymbolDisplay" class="text-2xl font-black font-mono text-indigo-400">GOLD</h3>
-            </div>
-            <button id="soundToggle" class="metric-badge">
-                <i class="fa-solid fa-volume-up mr-1"></i> Sound ON
-            </button>
+            <div><span class="text-[9px] text-slate-500 uppercase tracking-wider">Currently Analyzing</span><h3 id="currentSymbolDisplay" class="text-2xl font-black font-mono text-indigo-400">GOLD</h3></div>
+            <button id="soundToggle" class="metric-badge"><i class="fa-solid fa-volume-up mr-1"></i> Sound ON</button>
         </div>
 
-        <!-- Key Metrics -->
         <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-8">
-            <div class="glass-card p-4 text-center">
-                <p class="text-[9px] text-slate-500 uppercase font-black tracking-wider">Current</p>
-                <p id="currentPrice" class="text-xl font-bold font-mono">--</p>
-            </div>
-            <div class="glass-card p-4 text-center">
-                <p class="text-[9px] text-slate-500 uppercase font-black tracking-wider">RSI (14)</p>
-                <p id="rsiValue" class="text-xl font-bold font-mono">--</p>
-            </div>
-            <div class="glass-card p-4 text-center">
-                <p class="text-[9px] text-slate-500 uppercase font-black tracking-wider">ATR (14)</p>
-                <p id="atrValue" class="text-xl font-bold font-mono">--</p>
-            </div>
-            <div class="glass-card p-4 text-center">
-                <p class="text-[9px] text-slate-500 uppercase font-black tracking-wider">24H High</p>
-                <p id="highValue" class="text-xl font-bold font-mono text-emerald-400">--</p>
-            </div>
-            <div class="glass-card p-4 text-center">
-                <p class="text-[9px] text-slate-500 uppercase font-black tracking-wider">24H Low</p>
-                <p id="lowValue" class="text-xl font-bold font-mono text-rose-400">--</p>
-            </div>
+            <div class="glass-card p-4 text-center"><p class="text-[9px] text-slate-500 uppercase font-black tracking-wider">Current</p><p id="currentPrice" class="text-xl font-bold font-mono">--</p></div>
+            <div class="glass-card p-4 text-center"><p class="text-[9px] text-slate-500 uppercase font-black tracking-wider">RSI (14)</p><p id="rsiValue" class="text-xl font-bold font-mono">--</p></div>
+            <div class="glass-card p-4 text-center"><p class="text-[9px] text-slate-500 uppercase font-black tracking-wider">ATR (14)</p><p id="atrValue" class="text-xl font-bold font-mono">--</p></div>
+            <div class="glass-card p-4 text-center"><p class="text-[9px] text-slate-500 uppercase font-black tracking-wider">24H High</p><p id="highValue" class="text-xl font-bold font-mono text-emerald-400">--</p></div>
+            <div class="glass-card p-4 text-center"><p class="text-[9px] text-slate-500 uppercase font-black tracking-wider">24H Low</p><p id="lowValue" class="text-xl font-bold font-mono text-rose-400">--</p></div>
         </div>
 
-        <!-- Main Signal Card -->
         <div class="glass-card p-6 md:p-8 mb-8">
             <div class="flex justify-between items-start mb-6 flex-wrap gap-3">
-                <div>
-                    <p class="text-[9px] text-slate-500 uppercase font-black tracking-wider">TRADE BIAS</p>
-                    <h2 id="signalBias" class="text-6xl md:text-7xl font-black italic tracking-tighter signal-wait">--</h2>
-                </div>
-                <div class="text-right">
-                    <p class="text-[9px] text-slate-500 uppercase font-black tracking-wider">CONFIDENCE</p>
-                    <p id="confidenceScore" class="text-3xl font-black text-indigo-400">--</p>
-                </div>
+                <div><p class="text-[9px] text-slate-500 uppercase font-black tracking-wider">TRADE BIAS</p><h2 id="signalBias" class="text-6xl md:text-7xl font-black italic tracking-tighter signal-wait">--</h2></div>
+                <div class="text-right"><p class="text-[9px] text-slate-500 uppercase font-black tracking-wider">CONFIDENCE</p><p id="confidenceScore" class="text-3xl font-black text-indigo-400">--</p></div>
             </div>
             
             <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                <div class="bg-black/30 rounded-2xl p-4 text-center">
-                    <p class="text-[8px] text-slate-500 uppercase font-black tracking-wider">ENTRY</p>
-                    <p id="entryPrice" class="text-2xl font-black font-mono">--</p>
-                </div>
-                <div class="bg-black/30 rounded-2xl p-4 text-center">
-                    <p class="text-[8px] text-slate-500 uppercase font-black tracking-wider">STOP LOSS</p>
-                    <p id="stopLoss" class="text-2xl font-black font-mono text-rose-400">--</p>
-                </div>
-                <div class="bg-black/30 rounded-2xl p-4 text-center">
-                    <p class="text-[8px] text-slate-500 uppercase font-black tracking-wider">TAKE PROFIT</p>
-                    <p id="takeProfit" class="text-2xl font-black font-mono text-emerald-400">--</p>
-                </div>
-                <div class="bg-black/30 rounded-2xl p-4 text-center">
-                    <p class="text-[8px] text-slate-500 uppercase font-black tracking-wider">LOT SIZE (XM)</p>
-                    <p id="lotSize" class="text-2xl font-black font-mono text-cyan-400">--</p>
-                </div>
+                <div class="bg-black/30 rounded-2xl p-4 text-center"><p class="text-[8px] text-slate-500 uppercase font-black tracking-wider">ENTRY</p><p id="entryPrice" class="text-2xl font-black font-mono">--</p></div>
+                <div class="bg-black/30 rounded-2xl p-4 text-center"><p class="text-[8px] text-slate-500 uppercase font-black tracking-wider">STOP LOSS</p><p id="stopLoss" class="text-2xl font-black font-mono text-rose-400">--</p></div>
+                <div class="bg-black/30 rounded-2xl p-4 text-center"><p class="text-[8px] text-slate-500 uppercase font-black tracking-wider">TAKE PROFIT</p><p id="takeProfit" class="text-2xl font-black font-mono text-emerald-400">--</p></div>
+                <div class="bg-black/30 rounded-2xl p-4 text-center"><p class="text-[8px] text-slate-500 uppercase font-black tracking-wider">LOT SIZE (XM)</p><p id="lotSize" class="text-2xl font-black font-mono text-cyan-400">--</p></div>
             </div>
             
             <div class="flex justify-between items-center flex-wrap gap-3 mb-6 p-4 bg-black/20 rounded-2xl">
@@ -346,28 +153,21 @@
                 <p id="poiLogic" class="text-xs text-slate-400">Await price reaching this level before re-scanning</p>
             </div>
             
-            <p class="text-[9px] text-slate-600 text-center mt-6">
-                ⚠️ EDUCATIONAL ONLY | Signals for XM platform | You execute trades
-            </p>
+            <p class="text-[9px] text-slate-600 text-center mt-6">⚠️ EDUCATIONAL ONLY | Signals for XM platform | You execute trades</p>
         </div>
 
-        <button id="analyzeBtn" class="w-full py-5 rounded-2xl font-black text-sm uppercase tracking-wider transition-all"
-            style="background: linear-gradient(135deg, #6366f1, #4338ca); box-shadow: 0 4px 20px rgba(99,102,241,0.3);">
+        <button id="analyzeBtn" class="w-full py-5 rounded-2xl font-black text-sm uppercase tracking-wider transition-all" style="background: linear-gradient(135deg, #6366f1, #4338ca); box-shadow: 0 4px 20px rgba(99,102,241,0.3);">
             <i class="fa-solid fa-brain mr-2"></i> EXECUTE SURGICAL SCAN
         </button>
 
-        <!-- Backtest History -->
         <div class="glass-card p-6 mt-8">
             <div class="flex justify-between items-center mb-4">
                 <h3 class="text-sm font-black uppercase tracking-wider">📜 BACKTEST HISTORY</h3>
                 <button id="clearHistoryBtn" class="text-[9px] text-slate-500 hover:text-rose-400">Clear All</button>
             </div>
-            <div id="historyList" class="max-h-48 overflow-y-auto">
-                <p class="text-center text-slate-500 text-xs py-4">No signals recorded yet</p>
-            </div>
+            <div id="historyList" class="max-h-48 overflow-y-auto"><p class="text-center text-slate-500 text-xs py-4">No signals recorded yet</p></div>
         </div>
 
-        <!-- Settings Drawer -->
         <div id="settingsDrawer" class="fixed top-0 right-0 h-full w-full max-w-md bg-[#0a0f1a] z-50 transform translate-x-full transition-transform duration-300 shadow-2xl overflow-y-auto">
             <div class="p-8">
                 <div class="flex justify-between items-center mb-8">
@@ -382,15 +182,15 @@
                         <p class="text-[8px] text-slate-500 mt-1">Get from <a href="https://aistudio.google.com" target="_blank" class="text-indigo-400">aistudio.google.com</a></p>
                     </div>
                     
+                    <div>
+                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">🏦 OANDA API KEY (for real-time forex + gold)</label>
+                        <input type="password" id="oandaKey" class="input-dark w-full font-mono text-sm" placeholder="Enter your OANDA API key">
+                        <p class="text-[8px] text-slate-500 mt-1">Get from <a href="https://developer.oanda.com" target="_blank" class="text-indigo-400">developer.oanda.com</a> | Select "Primary" account</p>
+                    </div>
+                    
                     <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">💰 XM BALANCE ($)</label>
-                            <input type="number" id="balance" class="input-dark w-full" placeholder="10000" value="10000">
-                        </div>
-                        <div>
-                            <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">⚠️ RISK %</label>
-                            <input type="number" id="riskPercent" class="input-dark w-full" placeholder="1.0" value="1.0" step="0.1">
-                        </div>
+                        <div><label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">💰 XM BALANCE ($)</label><input type="number" id="balance" class="input-dark w-full" placeholder="10000" value="10000"></div>
+                        <div><label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">⚠️ RISK %</label><input type="number" id="riskPercent" class="input-dark w-full" placeholder="1.0" value="1.0" step="0.1"></div>
                     </div>
                     
                     <div>
@@ -409,9 +209,7 @@
                         <button id="testTelegramBtn" class="mt-3 text-[10px] text-indigo-400 hover:text-indigo-300">Test Connection</button>
                     </div>
                     
-                    <button id="saveSettings" class="w-full py-4 bg-indigo-600 rounded-xl font-black text-sm uppercase tracking-wider hover:bg-indigo-700 transition-all">
-                        SAVE & SECURE
-                    </button>
+                    <button id="saveSettings" class="w-full py-4 bg-indigo-600 rounded-xl font-black text-sm uppercase tracking-wider hover:bg-indigo-700 transition-all">SAVE & SECURE</button>
                 </div>
             </div>
         </div>
@@ -419,9 +217,7 @@
         <div id="drawerOverlay" class="fixed inset-0 bg-black/70 z-40 hidden"></div>
     </div>
 
-    <audio id="alertSound" preload="auto">
-        <source src="https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3" type="audio/mpeg">
-    </audio>
+    <audio id="alertSound" preload="auto"><source src="https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3" type="audio/mpeg"></audio>
 
     <script src="market-data.js"></script>
     <script src="strategy-engine.js"></script>
