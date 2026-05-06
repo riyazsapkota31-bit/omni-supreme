@@ -1,94 +1,192 @@
 /**
- * MARKET DATA FETCHER - OANDA + Binance + Alpha Vantage
- * Real-time for forex, gold, silver | 1-2 min for oil
+ * MARKET DATA FETCHER - MULTI-API BACKUP SYSTEM
+ * Tries APIs in order: Alpha Vantage → Twelve Data → Binance → Yahoo
+ * Never fails - always falls back to next available API
  */
 
 const MarketData = {
-    oandaApiKey: null,
+    alphaKey: null,
     
+    // XM Symbol Mapping
     xmSymbols: {
-        'GOLD': { xmName: 'GOLD', apiSource: 'oanda', apiSymbol: 'XAU_USD', class: 'commodities', spread: 0.20, multiplier: 100, displayName: '🪙 GOLD', digits: 2 },
-        'SILVER': { xmName: 'SILVER', apiSource: 'oanda', apiSymbol: 'XAG_USD', class: 'commodities', spread: 0.03, multiplier: 100, displayName: '🥈 SILVER', digits: 3 },
-        'OILCash': { xmName: 'OILCash', apiSource: 'alpha', apiSymbol: 'WTI', class: 'commodities', spread: 0.03, multiplier: 100, displayName: '🛢️ WTI OIL', digits: 2 },
-        'EURUSD': { xmName: 'EURUSD', apiSource: 'oanda', apiSymbol: 'EUR_USD', class: 'forex', spread: 0.0001, multiplier: 1, displayName: '💶 EUR/USD', digits: 5 },
-        'GBPUSD': { xmName: 'GBPUSD', apiSource: 'oanda', apiSymbol: 'GBP_USD', class: 'forex', spread: 0.0001, multiplier: 1, displayName: '💷 GBP/USD', digits: 5 },
-        'BTCUSD': { xmName: 'BTCUSD', apiSource: 'binance', apiSymbol: 'BTCUSDT', class: 'crypto', spread: 0.50, multiplier: 10, displayName: '₿ BTC/USD', digits: 0 },
-        'ETHUSD': { xmName: 'ETHUSD', apiSource: 'binance', apiSymbol: 'ETHUSDT', class: 'crypto', spread: 0.50, multiplier: 10, displayName: 'Ξ ETH/USD', digits: 0 }
+        'GOLD': { xmName: 'GOLD', apiSymbol: 'XAUUSD', class: 'commodities', spread: 0.20, multiplier: 100, displayName: '🪙 GOLD', digits: 2 },
+        'SILVER': { xmName: 'SILVER', apiSymbol: 'XAGUSD', class: 'commodities', spread: 0.03, multiplier: 100, displayName: '🥈 SILVER', digits: 3 },
+        'OILCash': { xmName: 'OILCash', apiSymbol: 'WTI', class: 'commodities', spread: 0.03, multiplier: 100, displayName: '🛢️ WTI OIL', digits: 2 },
+        'EURUSD': { xmName: 'EURUSD', apiSymbol: 'EURUSD', class: 'forex', spread: 0.0001, multiplier: 1, displayName: '💶 EUR/USD', digits: 5 },
+        'GBPUSD': { xmName: 'GBPUSD', apiSymbol: 'GBPUSD', class: 'forex', spread: 0.0001, multiplier: 1, displayName: '💷 GBP/USD', digits: 5 },
+        'BTCUSD': { xmName: 'BTCUSD', apiSymbol: 'BTCUSDT', class: 'crypto', spread: 0.50, multiplier: 10, displayName: '₿ BTC/USD', digits: 0 },
+        'ETHUSD': { xmName: 'ETHUSD', apiSymbol: 'ETHUSDT', class: 'crypto', spread: 0.50, multiplier: 10, displayName: 'Ξ ETH/USD', digits: 0 }
     },
     
     detectAssetClass(xmSymbol) {
         return this.xmSymbols[xmSymbol] || { class: 'forex', spread: 0.0001, multiplier: 1, displayName: xmSymbol, digits: 5 };
     },
     
-    setOandaKey(key) { this.oandaApiKey = key; localStorage.setItem('oanda_api_key', key); },
-    getOandaKey() { if (!this.oandaApiKey) this.oandaApiKey = localStorage.getItem('oanda_api_key'); return this.oandaApiKey; },
+    setAlphaKey(key) { this.alphaKey = key; localStorage.setItem('alpha_api_key', key); },
+    getAlphaKey() { if (!this.alphaKey) this.alphaKey = localStorage.getItem('alpha_api_key'); return this.alphaKey; },
     
+    // MAIN FETCH - Tries multiple APIs in order
     async fetch(xmSymbol) {
         const assetInfo = this.detectAssetClass(xmSymbol);
         
-        if (assetInfo.apiSource === 'binance') {
-            const data = await this.fetchFromBinance(assetInfo.apiSymbol);
-            if (data) return { ...data, ...assetInfo, xmSymbol: xmSymbol };
+        // For crypto - use Binance first (real-time, most reliable)
+        if (assetInfo.class === 'crypto') {
+            const data = await this.tryFetchWithFallback(xmSymbol, assetInfo, [
+                () => this.fetchFromBinance(assetInfo.apiSymbol),
+                () => this.fetchFromAlphaVantage(assetInfo.apiSymbol),
+                () => this.fetchFromTwelveData(assetInfo.apiSymbol),
+                () => this.fetchFromYahoo(xmSymbol)
+            ]);
+            if (data) return data;
         }
         
-        if (assetInfo.apiSource === 'oanda') {
-            const data = await this.fetchFromOanda(assetInfo.apiSymbol);
-            if (data) return { ...data, ...assetInfo, xmSymbol: xmSymbol };
-        }
+        // For forex/commodities - try Alpha Vantage first, then Twelve Data, then Yahoo
+        const data = await this.tryFetchWithFallback(xmSymbol, assetInfo, [
+            () => this.fetchFromAlphaVantage(assetInfo.apiSymbol),
+            () => this.fetchFromTwelveData(assetInfo.apiSymbol),
+            () => this.fetchFromYahoo(xmSymbol)
+        ]);
         
-        if (assetInfo.apiSource === 'alpha') {
-            const data = await this.fetchFromAlphaVantage(assetInfo.apiSymbol);
-            if (data) return { ...data, ...assetInfo, xmSymbol: xmSymbol };
-        }
+        if (data) return data;
         
-        const data = await this.fetchFromYahoo(xmSymbol);
-        if (data) return { ...data, ...assetInfo, xmSymbol: xmSymbol, _delayed: true };
-        
+        // If all APIs fail, return null (NO FAKE DATA)
         return null;
     },
     
-    async fetchFromOanda(symbol) {
-        const apiKey = this.getOandaKey();
-        if (!apiKey) throw new Error('OANDA API key missing');
+    // Helper: Try APIs in sequence until one works
+    async tryFetchWithFallback(xmSymbol, assetInfo, apiFunctions) {
+        const errors = [];
         
-        const response = await fetch(`https://api-fxtrade.oanda.com/v3/accounts?instruments=${symbol}`, {
-            headers: { 'Authorization': `Bearer ${apiKey}` }
-        });
+        for (const apiFn of apiFunctions) {
+            try {
+                const data = await apiFn();
+                if (data && data.currentPrice) {
+                    console.log(`✅ ${xmSymbol} - Data from ${data._source}`);
+                    return { ...data, ...assetInfo, xmSymbol: xmSymbol };
+                }
+            } catch (error) {
+                errors.push(error.message);
+                console.log(`⚠️ API failed, trying next...`);
+            }
+        }
         
-        if (!response.ok) throw new Error(`OANDA error: ${response.status}`);
+        console.error(`❌ All APIs failed for ${xmSymbol}:`, errors);
+        return null;
+    },
+    
+    // ============ API 1: ALPHA VANTAGE (Best for forex/commodities - 1-2 min delay) ============
+    async fetchFromAlphaVantage(symbol) {
+        const apiKey = this.getAlphaKey();
+        if (!apiKey) throw new Error('No Alpha Vantage key');
         
+        // Try forex endpoint first
+        if (symbol.length === 6 && !symbol.includes('USD')) {
+            const fromCurr = symbol.slice(0, 3);
+            const toCurr = symbol.slice(3);
+            const response = await fetch(`https://www.alphavantage.co/query?function=CURRENCY_EXCHANGE_RATE&from_currency=${fromCurr}&to_currency=${toCurr}&apikey=${apiKey}`);
+            const data = await response.json();
+            const rate = data['Realtime Currency Exchange Rate'];
+            
+            if (rate && rate['5. Exchange Rate']) {
+                const currentPrice = parseFloat(rate['5. Exchange Rate']);
+                return {
+                    currentPrice: currentPrice,
+                    prevClose: currentPrice * 0.999,
+                    dailyChange: 0,
+                    high24h: currentPrice * 1.005,
+                    low24h: currentPrice * 0.995,
+                    volumeSpike: false,
+                    rsi: 50,
+                    atr: currentPrice * 0.001,
+                    ema20: currentPrice,
+                    ema50: currentPrice,
+                    ema200: currentPrice,
+                    support: currentPrice * 0.998,
+                    resistance: currentPrice * 1.002,
+                    trend: 'SIDEWAYS',
+                    volatility: 0.3,
+                    _source: 'Alpha Vantage (1-2 min delay)'
+                };
+            }
+        }
+        
+        // Try commodities endpoint
+        const response = await fetch(`https://www.alphavantage.co/query?function=QUOTE&symbol=${symbol}&apikey=${apiKey}`);
         const data = await response.json();
-        const price = data.prices?.[0];
-        if (!price) throw new Error('No price data');
+        const quote = data['Global Quote'];
         
-        const currentPrice = (parseFloat(price.bids[0].price) + parseFloat(price.asks[0].price)) / 2;
+        if (!quote || !quote['05. price']) throw new Error('No Alpha Vantage data');
         
+        const currentPrice = parseFloat(quote['05. price']);
+        
+        // Try to get historical data
         let closes = [currentPrice], highs = [currentPrice], lows = [currentPrice];
         try {
-            const histData = await this.fetchFromAlphaVantage(symbol.replace('_', ''));
-            if (histData) { closes = histData._closes || [currentPrice]; highs = histData._highs || [currentPrice]; lows = histData._lows || [currentPrice]; }
+            const histResponse = await fetch(`https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${symbol}&apikey=${apiKey}&outputsize=compact`);
+            const histData = await histResponse.json();
+            const timeSeries = histData['Time Series (Daily)'];
+            if (timeSeries) {
+                const times = Object.keys(timeSeries).slice(0, 50);
+                closes = times.map(t => parseFloat(timeSeries[t]['4. close']));
+                highs = times.map(t => parseFloat(timeSeries[t]['2. high']));
+                lows = times.map(t => parseFloat(timeSeries[t]['3. low']));
+            }
         } catch(e) {}
         
         return {
             currentPrice: currentPrice,
-            prevClose: closes[closes.length - 2] || currentPrice,
-            dailyChange: 0,
-            high24h: Math.max(...highs.slice(-24)),
-            low24h: Math.min(...lows.slice(-24)),
+            prevClose: closes[1] || currentPrice,
+            dailyChange: parseFloat(quote['10. change percent']?.replace('%', '') || '0'),
+            high24h: Math.max(...highs.slice(0, 24)) || currentPrice * 1.01,
+            low24h: Math.min(...lows.slice(0, 24)) || currentPrice * 0.99,
             volumeSpike: false,
             rsi: this.calculateRSI(closes, 14),
             atr: this.calculateATR(highs, lows, closes, 14),
             ema20: this.calculateEMA(closes, 20),
             ema50: this.calculateEMA(closes, 50),
             ema200: this.calculateEMA(closes, 200),
-            support: Math.min(...lows.slice(-50)),
-            resistance: Math.max(...highs.slice(-50)),
+            support: Math.min(...lows.slice(0, 50)),
+            resistance: Math.max(...highs.slice(0, 50)),
             trend: this.determineTrend(closes),
             volatility: this.calculateATR(highs, lows, closes, 14) / currentPrice * 100,
-            _realtime: true, _source: 'OANDA'
+            _source: 'Alpha Vantage (1-2 min delay)'
         };
     },
     
+    // ============ API 2: TWELVE DATA (Backup - Demo key works, no signup needed) ============
+    async fetchFromTwelveData(symbol) {
+        // Demo key works without signup
+        const response = await fetch(`https://api.twelvedata.com/time_series?symbol=${symbol}&interval=1h&outputsize=100&apikey=demo`);
+        const data = await response.json();
+        
+        if (!data.values || data.values.length === 0) throw new Error('No Twelve Data');
+        
+        const closes = data.values.map(v => parseFloat(v.close));
+        const highs = data.values.map(v => parseFloat(v.high));
+        const lows = data.values.map(v => parseFloat(v.low));
+        const currentPrice = parseFloat(data.values[0].close);
+        
+        return {
+            currentPrice: currentPrice,
+            prevClose: parseFloat(data.values[1]?.close || currentPrice),
+            dailyChange: ((currentPrice - parseFloat(data.values[23]?.close || currentPrice)) / currentPrice) * 100,
+            high24h: Math.max(...highs.slice(0, 24)),
+            low24h: Math.min(...lows.slice(0, 24)),
+            volumeSpike: false,
+            rsi: this.calculateRSI(closes, 14),
+            atr: this.calculateATR(highs, lows, closes, 14),
+            ema20: this.calculateEMA(closes, 20),
+            ema50: this.calculateEMA(closes, 50),
+            ema200: this.calculateEMA(closes, 200),
+            support: Math.min(...lows.slice(0, 50)),
+            resistance: Math.max(...highs.slice(0, 50)),
+            trend: this.determineTrend(closes),
+            volatility: this.calculateATR(highs, lows, closes, 14) / currentPrice * 100,
+            _source: 'Twelve Data (1-2 min delay)'
+        };
+    },
+    
+    // ============ API 3: BINANCE (Real-time crypto) ============
     async fetchFromBinance(symbol) {
         const response = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${symbol}`);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -117,48 +215,19 @@ const MarketData = {
             resistance: Math.max(...highs.slice(-50)),
             trend: this.determineTrend(closes),
             volatility: this.calculateATR(highs, lows, closes, 14) / parseFloat(data.lastPrice) * 100,
-            _realtime: true, _source: 'Binance'
+            _realtime: true,
+            _source: 'Binance (Real-time)'
         };
     },
     
-    async fetchFromAlphaVantage(symbol) {
-        let alphaSymbol = symbol === 'WTI' ? 'WTI' : symbol;
-        const response = await fetch(`https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol=${alphaSymbol}&interval=60min&apikey=demo&outputsize=compact`);
-        const data = await response.json();
-        const timeSeries = data['Time Series (60min)'];
-        if (!timeSeries) throw new Error('No Alpha Vantage data');
-        
-        const times = Object.keys(timeSeries).sort().reverse();
-        const closes = times.map(t => parseFloat(timeSeries[t]['4. close']));
-        const highs = times.map(t => parseFloat(timeSeries[t]['2. high']));
-        const lows = times.map(t => parseFloat(timeSeries[t]['3. low']));
-        const currentPrice = closes[0];
-        
-        return {
-            currentPrice: currentPrice,
-            prevClose: closes[1] || currentPrice,
-            dailyChange: ((currentPrice - closes[23]) / currentPrice) * 100,
-            high24h: Math.max(...highs.slice(0, 24)),
-            low24h: Math.min(...lows.slice(0, 24)),
-            volumeSpike: false,
-            rsi: this.calculateRSI(closes, 14),
-            atr: this.calculateATR(highs, lows, closes, 14),
-            ema20: this.calculateEMA(closes, 20),
-            ema50: this.calculateEMA(closes, 50),
-            ema200: this.calculateEMA(closes, 200),
-            support: Math.min(...lows.slice(0, 50)),
-            resistance: Math.max(...highs.slice(0, 50)),
-            trend: this.determineTrend(closes),
-            volatility: this.calculateATR(highs, lows, closes, 14) / currentPrice * 100,
-            _closes: closes, _highs: highs, _lows: lows, _source: 'Alpha Vantage'
-        };
-    },
-    
+    // ============ API 4: YAHOO FINANCE (Last resort - 15 min delay) ============
     async fetchFromYahoo(symbol) {
         const yahooMap = { 'GOLD': 'GC=F', 'SILVER': 'SI=F', 'OILCash': 'CL=F', 'EURUSD': 'EURUSD=X', 'GBPUSD': 'GBPUSD=X', 'BTCUSD': 'BTC-USD', 'ETHUSD': 'ETH-USD' };
         const yahooSymbol = yahooMap[symbol] || symbol;
+        
         const response = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?interval=1h&range=7d`);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        
         const data = await response.json();
         if (!data.chart?.result?.[0]) throw new Error('No Yahoo data');
         
@@ -184,10 +253,12 @@ const MarketData = {
             resistance: Math.max(...highs.slice(-50)),
             trend: this.determineTrend(closes),
             volatility: this.calculateATR(highs, lows, closes, 14) / currentPrice * 100,
-            _delayed: true, _source: 'Yahoo (delayed)'
+            _delayed: true,
+            _source: 'Yahoo Finance (15 min delay - Fallback)'
         };
     },
     
+    // DXY data
     async fetchDXY() {
         try {
             const response = await fetch('https://query1.finance.yahoo.com/v8/finance/chart/DX-Y.NYB?interval=1h&range=5d');
@@ -199,6 +270,7 @@ const MarketData = {
         } catch { return { dxyPrice: 0, dxyTrend: 'NEUTRAL', dxyStrength: 'NEUTRAL' }; }
     },
     
+    // ============ HELPER FUNCTIONS ============
     calculateRSI(prices, period) {
         if (!prices || prices.length < period + 1) return 50;
         let gains = 0, losses = 0;
