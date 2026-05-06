@@ -1,166 +1,199 @@
 /**
- * MARKET DATA FETCHER - REAL-TIME FOR ALL ASSETS (XM Edition)
- * Crypto: Binance WebSocket (real-time)
- * Forex: fxempire WebSocket (real-time - free)
- * Commodities: socket.io from tradingeconomics (real-time)
+ * MARKET DATA FETCHER - BEST FREE APIS (OANDA + Alpha Vantage + Binance)
+ * Real-time for forex, gold, silver | 1-2 min for oil
  */
 
 const MarketData = {
-    wsConnections: {},
-    priceCallbacks: [],
-    currentPrices: {},
+    // OANDA API key (FREE - sign up at developer.oanda.com)
+    oandaApiKey: null,  // Will be loaded from localStorage
     
-    // XM Symbol Mapping - Your exact watchlist from screenshot
+    // XM Symbol Mapping
     xmSymbols: {
         'GOLD': { 
-            xmName: 'GOLD', wsSource: 'commodity', wsSymbol: 'XAUUSD',
+            xmName: 'GOLD', apiSource: 'oanda', apiSymbol: 'XAU_USD',
             class: 'commodities', spread: 0.20, multiplier: 100,
-            displayName: '🪙 GOLD', digits: 2, realTime: true
+            displayName: '🪙 GOLD', digits: 2
         },
         'SILVER': { 
-            xmName: 'SILVER', wsSource: 'commodity', wsSymbol: 'XAGUSD',
+            xmName: 'SILVER', apiSource: 'oanda', apiSymbol: 'XAG_USD',
             class: 'commodities', spread: 0.03, multiplier: 100,
-            displayName: '🥈 SILVER', digits: 3, realTime: true
+            displayName: '🥈 SILVER', digits: 3
         },
         'OILCash': { 
-            xmName: 'OILCash', wsSource: 'commodity', wsSymbol: 'CL1!',
+            xmName: 'OILCash', apiSource: 'alpha', apiSymbol: 'WTI',
             class: 'commodities', spread: 0.03, multiplier: 100,
-            displayName: '🛢️ WTI OIL', digits: 2, realTime: true
+            displayName: '🛢️ WTI OIL', digits: 2
         },
         'EURUSD': { 
-            xmName: 'EURUSD', wsSource: 'forex', wsSymbol: 'EURUSD',
+            xmName: 'EURUSD', apiSource: 'oanda', apiSymbol: 'EUR_USD',
             class: 'forex', spread: 0.0001, multiplier: 1,
-            displayName: '💶 EUR/USD', digits: 5, realTime: true
+            displayName: '💶 EUR/USD', digits: 5
         },
         'GBPUSD': { 
-            xmName: 'GBPUSD', wsSource: 'forex', wsSymbol: 'GBPUSD',
+            xmName: 'GBPUSD', apiSource: 'oanda', apiSymbol: 'GBP_USD',
             class: 'forex', spread: 0.0001, multiplier: 1,
-            displayName: '💷 GBP/USD', digits: 5, realTime: true
+            displayName: '💷 GBP/USD', digits: 5
         },
         'BTCUSD': { 
-            xmName: 'BTCUSD', wsSource: 'crypto', wsSymbol: 'btcusdt',
+            xmName: 'BTCUSD', apiSource: 'binance', apiSymbol: 'BTCUSDT',
             class: 'crypto', spread: 0.50, multiplier: 10,
-            displayName: '₿ BTC/USD', digits: 0, realTime: true
+            displayName: '₿ BTC/USD', digits: 0
         },
         'ETHUSD': { 
-            xmName: 'ETHUSD', wsSource: 'crypto', wsSymbol: 'ethusdt',
+            xmName: 'ETHUSD', apiSource: 'binance', apiSymbol: 'ETHUSDT',
             class: 'crypto', spread: 0.50, multiplier: 10,
-            displayName: 'Ξ ETH/USD', digits: 0, realTime: true
+            displayName: 'Ξ ETH/USD', digits: 0
         }
     },
     
     detectAssetClass(xmSymbol) {
         return this.xmSymbols[xmSymbol] || {
             class: 'forex', spread: 0.0001, multiplier: 1,
-            displayName: xmSymbol, digits: 5, realTime: false
+            displayName: xmSymbol, digits: 5
         };
     },
     
-    // MAIN FETCH - Uses REST API (fallback when WebSocket not connected)
+    // Set OANDA API key (user should get free from developer.oanda.com)
+    setOandaKey(key) {
+        this.oandaApiKey = key;
+        localStorage.setItem('oanda_api_key', key);
+    },
+    
+    getOandaKey() {
+        if (!this.oandaApiKey) {
+            this.oandaApiKey = localStorage.getItem('oanda_api_key');
+        }
+        return this.oandaApiKey;
+    },
+    
+    // MAIN FETCH
     async fetch(xmSymbol) {
         const assetInfo = this.detectAssetClass(xmSymbol);
         
-        // Try real-time REST endpoints first
-        if (assetInfo.class === 'crypto') {
-            const data = await this.fetchFromBinanceRest(assetInfo.wsSymbol);
+        if (assetInfo.apiSource === 'binance') {
+            const data = await this.fetchFromBinance(assetInfo.apiSymbol);
             if (data) return { ...data, ...assetInfo, xmSymbol: xmSymbol };
         }
         
-        if (assetInfo.class === 'forex') {
-            const data = await this.fetchFromForexRest(assetInfo.wsSymbol);
+        if (assetInfo.apiSource === 'oanda') {
+            const data = await this.fetchFromOanda(assetInfo.apiSymbol);
             if (data) return { ...data, ...assetInfo, xmSymbol: xmSymbol };
         }
         
-        if (assetInfo.class === 'commodities') {
-            const data = await this.fetchFromCommodityRest(assetInfo.wsSymbol);
+        if (assetInfo.apiSource === 'alpha') {
+            const data = await this.fetchFromAlphaVantage(assetInfo.apiSymbol);
             if (data) return { ...data, ...assetInfo, xmSymbol: xmSymbol };
         }
         
-        // Fallback to Yahoo (delayed but better than nothing)
-        try {
-            const data = await this.fetchFromYahoo(assetInfo.wsSymbol || xmSymbol);
-            if (data) return { ...data, ...assetInfo, xmSymbol: xmSymbol, _delayed: true };
-        } catch (e) {}
+        // Fallback to Yahoo (delayed)
+        const data = await this.fetchFromYahoo(xmSymbol);
+        if (data) return { ...data, ...assetInfo, xmSymbol: xmSymbol, _delayed: true };
         
         return null;
     },
     
-    // ============ REAL-TIME FOREX (fxempire - free WebSocket) ============
-    async fetchFromForexRest(symbol) {
-        // Free real-time forex API (updated every second)
-        const response = await fetch(`https://api.fxempire.com/v1/forex/quote?symbol=${symbol}`);
-        if (!response.ok) throw new Error('Forex API failed');
+    // ============ OANDA API (Real-time Forex + Gold/Silver) ============
+    async fetchFromOanda(symbol) {
+        const apiKey = this.getOandaKey();
+        if (!apiKey) {
+            console.log('OANDA API key missing. Get free at developer.oanda.com');
+            throw new Error('No OANDA key');
+        }
+        
+        // OANDA v3 API - real-time prices
+        const response = await fetch(`https://api-fxtrade.oanda.com/v3/accounts?instruments=${symbol}`, {
+            headers: { 'Authorization': `Bearer ${apiKey}` }
+        });
+        
+        if (!response.ok) throw new Error(`OANDA API error: ${response.status}`);
+        
+        const data = await response.json();
+        const price = data.prices?.[0];
+        
+        if (!price) throw new Error('No price data from OANDA');
+        
+        const currentPrice = (parseFloat(price.bids[0].price) + parseFloat(price.asks[0].price)) / 2;
+        
+        // Get historical data for indicators (using Alpha Vantage as backup)
+        let closes = [currentPrice], highs = [currentPrice], lows = [currentPrice];
+        try {
+            const histData = await this.fetchFromAlphaVantage(symbol.replace('_', ''));
+            if (histData) {
+                closes = histData._closes || [currentPrice];
+                highs = histData._highs || [currentPrice];
+                lows = histData._lows || [currentPrice];
+            }
+        } catch(e) {}
+        
+        return {
+            currentPrice: currentPrice,
+            prevClose: closes[closes.length - 2] || currentPrice,
+            dailyChange: 0,
+            high24h: Math.max(...highs.slice(-24)),
+            low24h: Math.min(...lows.slice(-24)),
+            volumeSpike: false,
+            rsi: this.calculateRSI(closes, 14),
+            atr: this.calculateATR(highs, lows, closes, 14),
+            ema20: this.calculateEMA(closes, 20),
+            ema50: this.calculateEMA(closes, 50),
+            ema200: this.calculateEMA(closes, 200),
+            support: Math.min(...lows.slice(-50)),
+            resistance: Math.max(...highs.slice(-50)),
+            trend: this.determineTrend(closes),
+            volatility: this.calculateATR(highs, lows, closes, 14) / currentPrice * 100,
+            _realtime: true,
+            _source: 'OANDA'
+        };
+    },
+    
+    // ============ ALPHA VANTAGE (Backup for Forex + Oil) ============
+    async fetchFromAlphaVantage(symbol) {
+        let alphaSymbol = symbol;
+        if (symbol === 'WTI') alphaSymbol = 'WTI';
+        
+        const response = await fetch(`https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol=${alphaSymbol}&interval=60min&apikey=demo&outputsize=compact`);
         const data = await response.json();
         
-        // Generate synthetic indicators from price
-        const currentPrice = data.bid || data.price;
+        const timeSeries = data['Time Series (60min)'];
+        if (!timeSeries) throw new Error('No Alpha Vantage data');
+        
+        const times = Object.keys(timeSeries).sort().reverse();
+        const closes = times.map(t => parseFloat(timeSeries[t]['4. close']));
+        const highs = times.map(t => parseFloat(timeSeries[t]['2. high']));
+        const lows = times.map(t => parseFloat(timeSeries[t]['3. low']));
+        const currentPrice = closes[0];
         
         return {
             currentPrice: currentPrice,
-            prevClose: currentPrice * (1 - (data.changePercent / 100)),
-            dailyChange: data.changePercent || 0,
-            high24h: currentPrice * 1.005,
-            low24h: currentPrice * 0.995,
+            prevClose: closes[1] || currentPrice,
+            dailyChange: ((currentPrice - closes[23]) / currentPrice) * 100,
+            high24h: Math.max(...highs.slice(0, 24)),
+            low24h: Math.min(...lows.slice(0, 24)),
             volumeSpike: false,
-            rsi: 50,
-            atr: currentPrice * 0.001,
-            ema20: currentPrice,
-            ema50: currentPrice,
-            ema200: currentPrice,
-            support: currentPrice * 0.998,
-            resistance: currentPrice * 1.002,
-            trend: 'SIDEWAYS',
-            volatility: 0.3,
-            _realtime: true
+            rsi: this.calculateRSI(closes, 14),
+            atr: this.calculateATR(highs, lows, closes, 14),
+            ema20: this.calculateEMA(closes, 20),
+            ema50: this.calculateEMA(closes, 50),
+            ema200: this.calculateEMA(closes, 200),
+            support: Math.min(...lows.slice(0, 50)),
+            resistance: Math.max(...highs.slice(0, 50)),
+            trend: this.determineTrend(closes),
+            volatility: this.calculateATR(highs, lows, closes, 14) / currentPrice * 100,
+            _closes: closes,
+            _highs: highs,
+            _lows: lows,
+            _source: 'Alpha Vantage'
         };
     },
     
-    // ============ REAL-TIME COMMODITIES (tradingeconomics - free) ============
-    async fetchFromCommodityRest(symbol) {
-        let commoditySymbol = symbol;
-        if (symbol === 'XAUUSD') commoditySymbol = 'GOLD';
-        if (symbol === 'XAGUSD') commoditySymbol = 'SILVER';
-        if (symbol === 'CL1!') commoditySymbol = 'OIL';
-        
-        const response = await fetch(`https://tradingeconomics.com/commodity/${commoditySymbol.toLowerCase()}`);
-        if (!response.ok) throw new Error('Commodity API failed');
-        
-        // Parse price from HTML (not ideal but free)
-        const html = await response.text();
-        const priceMatch = html.match(/data-value="([\d.]+)"/);
-        const currentPrice = priceMatch ? parseFloat(priceMatch[1]) : 0;
-        
-        if (!currentPrice) throw new Error('Could not parse commodity price');
-        
-        return {
-            currentPrice: currentPrice,
-            prevClose: currentPrice * 0.999,
-            dailyChange: 0,
-            high24h: currentPrice * 1.01,
-            low24h: currentPrice * 0.99,
-            volumeSpike: false,
-            rsi: 50,
-            atr: currentPrice * 0.005,
-            ema20: currentPrice,
-            ema50: currentPrice,
-            ema200: currentPrice,
-            support: currentPrice * 0.99,
-            resistance: currentPrice * 1.01,
-            trend: 'SIDEWAYS',
-            volatility: 0.5,
-            _realtime: true
-        };
-    },
-    
-    // ============ REAL-TIME CRYPTO (Binance) ============
-    async fetchFromBinanceRest(symbol) {
-        const binanceSymbol = symbol.toUpperCase();
-        const response = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${binanceSymbol}`);
+    // ============ BINANCE API (Real-time Crypto) ============
+    async fetchFromBinance(symbol) {
+        const response = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${symbol}`);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
         if (data.code) throw new Error(data.msg);
         
-        const klines = await fetch(`https://api.binance.com/api/v3/klines?symbol=${binanceSymbol}&interval=1h&limit=100`);
+        const klines = await fetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=1h&limit=100`);
         const klineData = await klines.json();
         const closes = klineData.map(c => parseFloat(c[4]));
         const highs = klineData.map(c => parseFloat(c[2]));
@@ -182,71 +215,19 @@ const MarketData = {
             resistance: Math.max(...highs.slice(-50)),
             trend: this.determineTrend(closes),
             volatility: this.calculateATR(highs, lows, closes, 14) / parseFloat(data.lastPrice) * 100,
-            _realtime: true
+            _realtime: true,
+            _source: 'Binance'
         };
     },
     
-    // ============ WEBSOCKET FOR REAL-TIME UPDATES ============
-    connectWebSocket(xmSymbol, callback) {
-        const assetInfo = this.xmSymbols[xmSymbol];
-        if (!assetInfo) return false;
-        
-        if (this.wsConnections[xmSymbol]) {
-            this.wsConnections[xmSymbol].close();
-        }
-        
-        // Crypto WebSocket (Binance - real-time)
-        if (assetInfo.class === 'crypto') {
-            const ws = new WebSocket(`wss://stream.binance.com:9443/ws/${assetInfo.wsSymbol}@ticker`);
-            ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                callback({
-                    currentPrice: parseFloat(data.c),
-                    dailyChange: parseFloat(data.P),
-                    high24h: parseFloat(data.h),
-                    low24h: parseFloat(data.l)
-                });
-            };
-            this.wsConnections[xmSymbol] = ws;
-            return true;
-        }
-        
-        // Forex WebSocket (fxempire - free)
-        if (assetInfo.class === 'forex') {
-            const ws = new WebSocket(`wss://stream.fxempire.com/forex/${assetInfo.wsSymbol}`);
-            ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                callback({
-                    currentPrice: data.price,
-                    dailyChange: data.changePercent
-                });
-            };
-            this.wsConnections[xmSymbol] = ws;
-            return true;
-        }
-        
-        // Commodities WebSocket (using polling as fallback)
-        console.log(`${xmSymbol} - Using polling for real-time updates`);
-        const interval = setInterval(async () => {
-            const data = await this.fetch(xmSymbol);
-            if (data) callback(data);
-        }, 2000);
-        this.wsConnections[xmSymbol] = { close: () => clearInterval(interval) };
-        return true;
-    },
-    
-    disconnectWebSocket(xmSymbol) {
-        if (this.wsConnections[xmSymbol]) {
-            this.wsConnections[xmSymbol].close();
-            delete this.wsConnections[xmSymbol];
-        }
-    },
-    
-    // ============ YAHOO FALLBACK (Delayed) ============
+    // ============ YAHOO FALLBACK (Delayed - Last Resort) ============
     async fetchFromYahoo(symbol) {
-        let yahooSymbol = symbol;
-        const map = { 'XAUUSD': 'GC=F', 'XAGUSD': 'SI=F', 'CL1!': 'CL=F' };
-        if (map[symbol]) yahooSymbol = map[symbol];
+        const yahooMap = {
+            'GOLD': 'GC=F', 'SILVER': 'SI=F', 'OILCash': 'CL=F',
+            'EURUSD': 'EURUSD=X', 'GBPUSD': 'GBPUSD=X',
+            'BTCUSD': 'BTC-USD', 'ETHUSD': 'ETH-USD'
+        };
+        const yahooSymbol = yahooMap[symbol] || symbol;
         
         const response = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?interval=1h&range=7d`);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -276,11 +257,12 @@ const MarketData = {
             resistance: Math.max(...highs.slice(-50)),
             trend: this.determineTrend(closes),
             volatility: this.calculateATR(highs, lows, closes, 14) / currentPrice * 100,
-            _delayed: true
+            _delayed: true,
+            _source: 'Yahoo (delayed)'
         };
     },
     
-    // DXY data (delayed - no free real-time DXY)
+    // DXY data
     async fetchDXY() {
         try {
             const response = await fetch('https://query1.finance.yahoo.com/v8/finance/chart/DX-Y.NYB?interval=1h&range=5d');
