@@ -18,7 +18,8 @@ const RiskManager = {
             stopLoss = currentPrice - slDistance;
             if (stopLoss > support) stopLoss = support * 0.998;
             
-            const minRR = mode === 'scalp' ? 1.5 : 3.0;
+            // CORRECTED: Day trading min RR changed from 3.0 to 4.0
+            const minRR = mode === 'scalp' ? 1.5 : 4.0;
             const maxRR = mode === 'scalp' ? 4.0 : 10.0;
             const targetRR = Math.min(minRR + (signal.confidence / 100) * 3, maxRR);
             const actualRisk = Math.abs(entry - stopLoss);
@@ -38,7 +39,8 @@ const RiskManager = {
             stopLoss = currentPrice + slDistance;
             if (stopLoss < resistance) stopLoss = resistance * 1.002;
             
-            const minRR = mode === 'scalp' ? 1.5 : 3.0;
+            // CORRECTED: Day trading min RR changed from 3.0 to 4.0
+            const minRR = mode === 'scalp' ? 1.5 : 4.0;
             const maxRR = mode === 'scalp' ? 4.0 : 10.0;
             const targetRR = Math.min(minRR + (signal.confidence / 100) * 3, maxRR);
             const actualRisk = Math.abs(stopLoss - entry);
@@ -54,7 +56,8 @@ const RiskManager = {
             return { entry: null, stopLoss: null, takeProfit: null, rrRatio: 0, lotSize: 0 };
         }
         
-        const minRRRequired = mode === 'scalp' ? 1.5 : 3.0;
+        // CORRECTED: Day trading min RR changed from 3.0 to 4.0
+        const minRRRequired = mode === 'scalp' ? 1.5 : 4.0;
         if (rrRatio < minRRRequired) {
             return { entry: null, stopLoss: null, takeProfit: null, rrRatio: rrRatio, lotSize: 0, waitReason: `RR ${rrRatio.toFixed(1)} below minimum ${minRRRequired}:1` };
         }
