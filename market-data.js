@@ -1,15 +1,13 @@
 /**
- * MARKET DATA FETCHER – Twelve Data WebSocket + REST with aggressive caching
- * - Real‑time: XAUUSD, XAGUSD via WebSocket (0 credits, permanent free)
- * - Other assets: REST with 60‑second cache (1 credit per symbol per minute max)
- * - Auto tracking uses fetchPriceForTracking() – never consumes credits
+ * MARKET DATA FETCHER – Twelve Data WebSocket + REST with cache
+ * Displays error on screen if API key is missing.
  */
 
 const MarketData = {
     ws: null,
     wsConnected: false,
-    lastPrices: {},        // real‑time price cache (WebSocket)
-    restCache: {},         // REST responses with timestamp
+    lastPrices: {},
+    restCache: {},
     apiKey: null,
 
     assetInfo: {
@@ -25,14 +23,29 @@ const MarketData = {
     setApiKey(key) { this.apiKey = key; localStorage.setItem('twelve_data_key', key); },
     getApiKey() { if (!this.apiKey) this.apiKey = localStorage.getItem('twelve_data_key'); return this.apiKey; },
 
-    // ---- WebSocket (real‑time, 0 credits) ----
+    showError(msg) {
+        let errDiv = document.getElementById('apiKeyError');
+        if (!errDiv) {
+            errDiv = document.createElement('div');
+            errDiv.id = 'apiKeyError';
+            errDiv.style.cssText = 'position:fixed; bottom:10px; left:10px; right:10px; background:#ff4466; color:white; padding:10px; border-radius:12px; font-size:11px; z-index:9999; text-align:center;';
+            document.body.appendChild(errDiv);
+        }
+        errDiv.innerHTML = msg;
+        errDiv.style.display = 'block';
+        setTimeout(() => { if(errDiv) errDiv.style.display = 'none'; }, 10000);
+    },
+
     initWebSocket(apiKey) {
-        if (!apiKey) return;
+        if (!apiKey) {
+            console.warn('No API key – WebSocket disabled');
+            return;
+        }
         if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return;
         const wsUrl = `wss://ws.twelvedata.com/v1/quotes?apikey=${apiKey}`;
         this.ws = new WebSocket(wsUrl);
         this.ws.onopen = () => {
-            console.log('Twelve Data WebSocket connected');
+            console.log('WebSocket connected');
             this.wsConnected = true;
             this.ws.send(JSON.stringify({ action: 'subscribe', symbols: ['XAUUSD', 'XAGUSD'] }));
         };
@@ -62,18 +75,20 @@ const MarketData = {
         return null;
     },
 
-    // ---- Full REST fetch with 60s cache (used only by manual "GO") ----
     async fetchFullData(symbol) {
         const apiKey = this.getApiKey();
+        if (!apiKey) {
+            this.showError('⚠️ Twelve Data API key missing. Please enter your API key in settings.');
+            throw new Error('No API key');
+        }
         const cached = this.restCache[symbol];
         if (cached && (Date.now() - cached.timestamp) < 60000) {
-            console.log(`Using cached full data for ${symbol}`);
             return cached.data;
         }
-        const url = `https://api.twelvedata.com/time_series?symbol=${symbol}&interval=1h&outputsize=100&apikey=${apiKey || 'demo'}`;
+        const url = `https://api.twelvedata.com/time_series?symbol=${symbol}&interval=1h&outputsize=100&apikey=${apiKey}`;
         const resp = await fetch(url);
         const data = await resp.json();
-        if (!data.values || data.values.length === 0) throw new Error('No data');
+        if (!data.values || data.values.length === 0) throw new Error('No data from Twelve Data');
         const vals = data.values;
         const closes = vals.map(v => parseFloat(v.close));
         const highs = vals.map(v => parseFloat(v.high));
@@ -101,41 +116,33 @@ const MarketData = {
         return result;
     },
 
-    // ---- Price-only fetch (used by auto tracking, 0 credits) ----
     async fetchPriceOnly(symbol) {
         const info = this.assetInfo[symbol];
         if (!info) return null;
-
-        // Real‑time assets: use WebSocket price (0 credits)
         if (info.realtime && this.apiKey) {
             if (!this.wsConnected) this.initWebSocket(this.apiKey);
             const realPrice = await this.getRealtimePrice(symbol);
             if (realPrice !== null) return realPrice;
         }
-
-        // For other assets: try to get price from last full cache (still fresh)
         const cachedFull = this.restCache[symbol];
         if (cachedFull && (Date.now() - cachedFull.timestamp) < 60000) {
             return cachedFull.data.currentPrice;
         }
-
-        // If no fresh cache, return last known price (even if expired) – no API call
         if (cachedFull) return cachedFull.data.currentPrice;
         return null;
     },
 
-    // ---- Main fetch for manual "GO" button (uses full data with cache) ----
     async fetch(xmSymbol) {
         const info = this.assetInfo[xmSymbol];
         if (!info) return null;
 
         const apiKey = this.getApiKey();
         if (!apiKey) {
-            console.warn('No API key – using demo REST (delayed)');
+            this.showError('⚠️ Twelve Data API key missing. Please enter your API key in settings.');
+            return null;
         }
 
-        // For real‑time assets: combine WebSocket price with cached indicators
-        if (info.realtime && apiKey) {
+        if (info.realtime) {
             if (!this.wsConnected) this.initWebSocket(apiKey);
             const realPrice = await this.getRealtimePrice(xmSymbol);
             let fullData = this.restCache[xmSymbol + '_full']?.data;
@@ -145,17 +152,14 @@ const MarketData = {
             }
             if (fullData) {
                 const result = { ...fullData, ...info };
-                result.currentPrice = realPrice;
-                result._source = 'WebSocket (price) + REST indicators';
+                result.currentPrice = realPrice !== null ? realPrice : fullData.currentPrice;
+                result._source = realPrice !== null ? 'WebSocket (price) + REST indicators' : 'REST (WebSocket failed)';
                 return result;
             }
         }
-
-        // For all others: use full REST with cache
         return await this.fetchFullData(xmSymbol);
     },
 
-    // Explicit method for auto tracking (no credit consumption)
     async fetchPriceForTracking(symbol) {
         return await this.fetchPriceOnly(symbol);
     },
@@ -164,7 +168,6 @@ const MarketData = {
         return { dxyPrice: 0, dxyTrend: 'NEUTRAL', dxyStrength: 'NEUTRAL' };
     },
 
-    // Technical indicators (unchanged)
     calcRSI(prices, period) {
         if (prices.length < period + 1) return 50;
         let gains = 0, losses = 0;
