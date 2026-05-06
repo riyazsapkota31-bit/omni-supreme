@@ -1,6 +1,6 @@
 /**
  * OMNI-SIGNAL - Main Application
- * Uses market-data.js with Multi-API Fallback
+ * Uses advanced StrategyEngine (5 signals, market filters, DXY filter)
  */
 
 // Global variable for Alpha Vantage (used by market-data.js)
@@ -147,76 +147,16 @@ function toggleTheme() {
     }
 }
 
-// Signal Engine
-const SignalEngine = {
-    analyze(data, mode) {
-        const { rsi, currentPrice, ema20, ema50, support, resistance, trend } = data;
-        let bias = 'WAIT';
-        let confidence = 50;
-        let reason = '';
-        
-        if (rsi < 30 && currentPrice > support) {
-            bias = 'BUY';
-            confidence = 65 + (30 - rsi);
-            reason = `RSI oversold at ${rsi.toFixed(1)}. Support nearby.`;
-        } else if (rsi > 70 && currentPrice < resistance) {
-            bias = 'SELL';
-            confidence = 65 + (rsi - 70);
-            reason = `RSI overbought at ${rsi.toFixed(1)}. Resistance above.`;
-        }
-        
-        if (bias === 'BUY' && ema20 > ema50) {
-            confidence += 15;
-            reason += ' Bullish EMA alignment.';
-        } else if (bias === 'SELL' && ema20 < ema50) {
-            confidence += 15;
-            reason += ' Bearish EMA alignment.';
-        } else if (bias !== 'WAIT' && ((bias === 'BUY' && ema20 < ema50) || (bias === 'SELL' && ema20 > ema50))) {
-            confidence -= 20;
-            reason += ' EMA conflict.';
-        }
-        
-        if (mode === 'day' && trend === 'SIDEWAYS' && bias !== 'WAIT') {
-            confidence -= 25;
-            reason += ' Sideways market - not ideal for day trading.';
-        }
-        
-        if (confidence < 55) {
-            bias = 'WAIT';
-            confidence = 50;
-            reason = 'Insufficient confluence. Wait for better setup.';
-        }
-        
-        let entry = null, sl = null, tp = null;
-        if (bias === 'BUY') {
-            entry = currentPrice;
-            sl = support * 0.998;
-            const targetRR = mode === 'scalp' ? 1.5 : 4.0;
-            const risk = entry - sl;
-            tp = entry + (risk * targetRR);
-            if (tp > resistance) tp = resistance * 0.998;
-        } else if (bias === 'SELL') {
-            entry = currentPrice;
-            sl = resistance * 1.002;
-            const targetRR = mode === 'scalp' ? 1.5 : 4.0;
-            const risk = sl - entry;
-            tp = entry - (risk * targetRR);
-            if (tp < support) tp = support * 1.002;
-        }
-        
-        return { bias, confidence, reason, entry, sl, tp };
-    },
-    
-    calculateLotSize(entry, sl, balance, riskPercent) {
-        if (!entry || !sl) return 0.01;
-        const riskAmount = balance * (riskPercent / 100);
-        const stopDistance = Math.abs(entry - sl);
-        if (stopDistance === 0) return 0.01;
-        let lot = riskAmount / (stopDistance * 10000);
-        lot = Math.floor(lot * 100) / 100;
-        return Math.max(0.01, Math.min(lot, 10));
-    }
-};
+// Lot size calculation (used after signal)
+function calculateLotSize(entry, sl, balance, riskPercent) {
+    if (!entry || !sl) return 0.01;
+    const riskAmount = balance * (riskPercent / 100);
+    const stopDistance = Math.abs(entry - sl);
+    if (stopDistance === 0) return 0.01;
+    let lot = riskAmount / (stopDistance * 10000);
+    lot = Math.floor(lot * 100) / 100;
+    return Math.max(0.01, Math.min(lot, 10));
+}
 
 // Auto Price Tracking
 function startAutoTracking() {
@@ -261,7 +201,7 @@ function stopAutoTracking() {
 // Gemini Explanation (optional)
 async function getGeminiExplanation(apiKey) {
     if (!apiKey) return null;
-    const prompt = `Explain this trade signal in 10-15 words: ${currentSymbol} price ${currentData?.currentPrice}. RSI ${currentData?.rsi?.toFixed(1)}. Signal: ${currentSignal?.bias} with ${currentSignal?.confidence}% confidence.`;
+    const prompt = `Explain this trade signal in 10-15 words: ${currentSymbol} price ${currentData?.currentPrice}. RSI ${currentData?.rsi?.toFixed(1)}. Signal: ${currentSignal?.bias} with ${currentSignal?.confidence}% confidence. ${currentSignal?.conditionsDetected || ''}`;
     try {
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`, {
             method: 'POST',
@@ -273,7 +213,7 @@ async function getGeminiExplanation(apiKey) {
     } catch(e) { return null; }
 }
 
-// Main Analysis
+// Main Analysis – uses advanced StrategyEngine
 async function analyze() {
     const apiKey = document.getElementById('apiKey').value;
     if (!apiKey) { openDrawer(); showToast('Please enter your Gemini API key', 'error'); return; }
@@ -289,9 +229,17 @@ async function analyze() {
         elements.currentPrice.textContent = currentData.currentPrice.toFixed(currentData.digits || 2);
         elements.updateTime.textContent = `Updated: ${new Date().toLocaleTimeString()}`;
         
+        // Fetch DXY data for filter (used by StrategyEngine)
+        let dxyData = null;
+        try {
+            dxyData = await MarketData.fetchDXY();
+        } catch(e) { console.warn('DXY fetch failed, continuing without filter'); }
+        
         const balance = parseFloat(document.getElementById('balance').value);
         const riskPercent = parseFloat(document.getElementById('riskPercent').value);
-        currentSignal = SignalEngine.analyze(currentData, currentMode);
+        
+        // Use the advanced StrategyEngine (external file)
+        currentSignal = await StrategyEngine.analyze(currentData, currentMode, { dxyData });
         
         elements.signalBias.textContent = currentSignal.bias;
         elements.signalBias.className = `text-7xl font-black italic ${
@@ -300,17 +248,40 @@ async function analyze() {
         }`;
         elements.confidenceText.textContent = `${currentSignal.confidence}% confidence`;
         
-        if (currentSignal.bias !== 'WAIT' && currentSignal.entry && currentSignal.sl && currentSignal.tp) {
-            currentTradeLevels = { entry: currentSignal.entry, stopLoss: currentSignal.sl, takeProfit: currentSignal.tp };
-            elements.entryPrice.textContent = currentSignal.entry.toFixed(currentData.digits || 5);
-            elements.stopLoss.textContent = currentSignal.sl.toFixed(currentData.digits || 5);
-            elements.takeProfit.textContent = currentSignal.tp.toFixed(currentData.digits || 5);
+        // Calculate trade levels using RiskManager (if available) or simple logic
+        let entry = null, sl = null, tp = null;
+        if (currentSignal.bias !== 'WAIT') {
+            // Use the same level calculation as before (can also use RiskManager if imported)
+            const support = currentData.support;
+            const resistance = currentData.resistance;
+            if (currentSignal.bias === 'BUY') {
+                entry = currentData.currentPrice;
+                sl = support * 0.998;
+                const targetRR = currentMode === 'scalp' ? 1.5 : 4.0;
+                const risk = entry - sl;
+                tp = entry + (risk * targetRR);
+                if (tp > resistance) tp = resistance * 0.998;
+            } else if (currentSignal.bias === 'SELL') {
+                entry = currentData.currentPrice;
+                sl = resistance * 1.002;
+                const targetRR = currentMode === 'scalp' ? 1.5 : 4.0;
+                const risk = sl - entry;
+                tp = entry - (risk * targetRR);
+                if (tp < support) tp = support * 1.002;
+            }
+        }
+        
+        if (currentSignal.bias !== 'WAIT' && entry && sl && tp) {
+            currentTradeLevels = { entry, stopLoss: sl, takeProfit: tp };
+            elements.entryPrice.textContent = entry.toFixed(currentData.digits || 5);
+            elements.stopLoss.textContent = sl.toFixed(currentData.digits || 5);
+            elements.takeProfit.textContent = tp.toFixed(currentData.digits || 5);
             
-            const lotSize = SignalEngine.calculateLotSize(currentSignal.entry, currentSignal.sl, balance, riskPercent);
+            const lotSize = calculateLotSize(entry, sl, balance, riskPercent);
             elements.lotSize.textContent = lotSize.toFixed(2);
             
-            const risk = Math.abs(currentSignal.entry - currentSignal.sl);
-            const reward = Math.abs(currentSignal.tp - currentSignal.entry);
+            const risk = Math.abs(entry - sl);
+            const reward = Math.abs(tp - entry);
             const rr = risk > 0 ? (reward / risk).toFixed(1) : 0;
             elements.rrValue.textContent = `1:${rr}`;
             elements.tradeType.textContent = currentMode === 'scalp' ? 'SCALP' : 'DAY';
@@ -320,17 +291,20 @@ async function analyze() {
             if (autoTrackingEnabled) startAutoTracking();
             
             const geminiText = await getGeminiExplanation(apiKey);
-            elements.logicText.innerHTML = `<span class="text-cyan-400">🎯 ${currentSignal.bias}</span><br>${geminiText || currentSignal.reason}`;
+            const reasoning = currentSignal.reasons?.join(' ') || currentSignal.conditionsDetected || currentSignal.primaryStrategy;
+            elements.logicText.innerHTML = `<span class="text-cyan-400">🎯 ${currentSignal.bias}</span><br>${geminiText || reasoning}`;
         } else {
             elements.entryPrice.textContent = '--';
             elements.stopLoss.textContent = '--';
             elements.takeProfit.textContent = '--';
             elements.lotSize.textContent = '--';
             elements.rrValue.textContent = '0:0';
-            elements.poiLevel.textContent = currentData.currentPrice.toFixed(currentData.digits || 2);
-            elements.poiLogic.textContent = currentSignal.reason;
+            // Show POI from RiskManager if available, else simple
+            const poi = currentData.currentPrice;
+            elements.poiLevel.textContent = poi.toFixed(currentData.digits || 2);
+            elements.poiLogic.textContent = currentSignal.reasons?.[0] || 'Insufficient confluence. Wait for better setup.';
             elements.poiBox.classList.remove('hidden');
-            elements.logicText.innerHTML = `<span class="text-amber-400">⏸️ WAIT MODE</span><br>${currentSignal.reason}`;
+            elements.logicText.innerHTML = `<span class="text-amber-400">⏸️ WAIT MODE</span><br>${currentSignal.primaryStrategy || 'No clear setup'}`;
         }
     } catch (error) {
         console.error(error);
@@ -356,7 +330,7 @@ function init() {
         if (typeof renderFeedbackHistory === 'function') renderFeedbackHistory();
         if (typeof updateStrategyPerformance === 'function') updateStrategyPerformance();
     }, 100);
-    showToast('App ready. Multi-API active.', 'info');
+    showToast('App ready. Advanced strategy engine active.', 'info');
 }
 
 // Start app
