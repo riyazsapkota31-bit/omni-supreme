@@ -1,9 +1,9 @@
 /**
- * MARKET DATA FETCHER – Alpha Vantage (primary) + Twelve Data WebSocket (real‑time) + Yahoo (fallback)
- * - Alpha Vantage: provides daily historical data for RSI, EMAs, support/resistance.
- * - Twelve Data WebSocket: overrides currentPrice with real‑time ticks if available.
- * - Yahoo: ultimate fallback if Alpha Vantage fails.
- * All API keys are read from localStorage (set in index.html settings).
+ * MARKET DATA FETCHER – Alpha Vantage + Twelve Data WebSocket + Yahoo fallback
+ * - Alpha Vantage: daily closes → RSI, EMAs, support/resistance
+ * - Twelve Data WebSocket: overrides current price (real‑time) if it receives data
+ * - Yahoo: ultimate fallback (always works)
+ * All methods (setAlphaKey, setTwelveKey, fetch, etc.) are defined.
  */
 
 const MarketData = {
@@ -30,7 +30,6 @@ const MarketData = {
     setTwelveKey(key) { this.twelveKey = key; localStorage.setItem('twelve_data_key', key); },
     getTwelveKey() { if (!this.twelveKey) this.twelveKey = localStorage.getItem('twelve_data_key'); return this.twelveKey; },
 
-    // CORS proxy (free, works)
     async fetchWithProxy(url) {
         const proxy = 'https://corsproxy.io/?';
         const resp = await fetch(proxy + encodeURIComponent(url));
@@ -38,24 +37,21 @@ const MarketData = {
         return resp.json();
     },
 
-    // ---- Alpha Vantage: historical daily data (for indicators) ----
+    // ---- Alpha Vantage: daily historical data (for indicators) ----
     async fetchHistoricalData(symbol) {
         const key = this.getAlphaKey();
         if (!key) throw new Error('No Alpha Vantage key');
         let url;
         if (symbol === 'XAUUSD' || symbol === 'XAGUSD') {
-            // For gold and silver, Alpha Vantage uses FOREX endpoint with XAU/USD, XAG/USD
             const from = symbol.slice(0,3), to = symbol.slice(3);
             url = `https://www.alphavantage.co/query?function=FX_DAILY&from_symbol=${from}&to_symbol=${to}&outputsize=compact&apikey=${key}`;
         } else if (symbol === 'OILCash') {
-            // Oil is not directly available via FX_DAILY; fallback to Yahoo later
-            return [];
+            return []; // Oil not available via Alpha Vantage FX_DAILY
         } else if (symbol === 'EURUSD' || symbol === 'GBPUSD') {
             const from = symbol.slice(0,3), to = symbol.slice(3);
             url = `https://www.alphavantage.co/query?function=FX_DAILY&from_symbol=${from}&to_symbol=${to}&outputsize=compact&apikey=${key}`;
         } else {
-            // Crypto, use DIGITAL_CURRENCY_DAILY? But not needed, we'll rely on Yahoo.
-            return [];
+            return []; // Crypto not needed
         }
         const data = await this.fetchWithProxy(url);
         const timeSeries = data['Time Series FX (Daily)'];
@@ -68,7 +64,6 @@ const MarketData = {
     // ---- Alpha Vantage: current quote (price) ----
     async fetchCurrentQuote(symbol) {
         const key = this.getAlphaKey();
-        // Use GLOBAL_QUOTE for forex and crypto (works for XAUUSD too)
         const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${key}`;
         const data = await this.fetchWithProxy(url);
         const quote = data['Global Quote'];
@@ -144,7 +139,7 @@ const MarketData = {
         };
     },
 
-    // ---- Twelve Data WebSocket (real‑time) ----
+    // ---- Twelve Data WebSocket (real‑time price override) ----
     initWebSocket() {
         const key = this.getTwelveKey();
         if (!key) return;
@@ -154,7 +149,6 @@ const MarketData = {
         this.ws.onopen = () => {
             console.log('WebSocket connected');
             this.wsConnected = true;
-            // Subscribe format: {"action":"subscribe","symbols":"XAUUSD,XAGUSD,CL"}
             this.ws.send(JSON.stringify({ action: 'subscribe', symbols: 'XAUUSD,XAGUSD,CL' }));
         };
         this.ws.onmessage = (e) => {
@@ -163,6 +157,7 @@ const MarketData = {
                 if (d.symbol && d.price) {
                     this.webSocketPrice = parseFloat(d.price);
                     this.webSocketPriceTime = Date.now();
+                    console.log(`WebSocket price: ${d.symbol}=${d.price}`);
                 }
             } catch(err) {}
         };
@@ -188,11 +183,10 @@ const MarketData = {
         // Check cache (60 seconds)
         const cached = this.restCache[xmSymbol];
         if (cached && (Date.now() - cached.ts) < 60000) {
-            // If we have a newer WebSocket price, override
             const wsPrice = this.getWebSocketPrice();
-            if (wsPrice && cached.data) {
+            if (wsPrice && cached.data && (xmSymbol === 'XAUUSD' || xmSymbol === 'XAGUSD' || xmSymbol === 'OILCash')) {
                 cached.data.currentPrice = wsPrice;
-                cached.data._source += ' + WebSocket price';
+                cached.data._source = 'Cached + WebSocket price';
             }
             return cached.data;
         }
@@ -206,14 +200,13 @@ const MarketData = {
                 let closes = [];
                 try {
                     closes = await this.fetchHistoricalData(xmSymbol);
-                } catch(e) { console.warn('Historical fetch failed, using defaults', e); }
+                } catch(e) { console.warn('Historical fetch failed', e); }
                 const quote = await this.fetchCurrentQuote(xmSymbol);
                 const price = quote.price;
                 let rsi = 50, ema20 = price, ema50 = price, ema200 = price;
                 let support = price * 0.998, resistance = price * 1.002;
                 let trend = 'SIDEWAYS', atr = price * 0.001, volatility = 0.3;
                 if (closes.length >= 50) {
-                    // Calculate indicators only if we have enough history
                     rsi = this.calcRSI(closes);
                     ema20 = this.calcEMA(closes, 20);
                     ema50 = this.calcEMA(closes, 50);
@@ -256,19 +249,18 @@ const MarketData = {
         // Add asset info
         data = { ...data, ...info, _source: usedSource };
 
-        // Override price with WebSocket if available and symbol is supported (XAUUSD, XAGUSD, OILCash)
+        // Override price with WebSocket if available
         const wsPrice = this.getWebSocketPrice();
         if (wsPrice && (xmSymbol === 'XAUUSD' || xmSymbol === 'XAGUSD' || xmSymbol === 'OILCash')) {
             data.currentPrice = wsPrice;
             data._source += ' + WebSocket price';
         }
 
-        // Store in cache
         this.restCache[xmSymbol] = { data, ts: Date.now() };
         return data;
     },
 
-    // Technical indicators (same as before)
+    // Technical indicators
     calcRSI(prices, period = 14) {
         if (prices.length < period + 1) return 50;
         let gains = 0, losses = 0;
