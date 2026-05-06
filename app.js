@@ -1,9 +1,10 @@
 /**
  * OMNI-SIGNAL - Main Application
  * Uses advanced StrategyEngine (5 signals, market filters, DXY filter)
+ * Upgrades: 6 (partial profit display), 9 (AI final check for borderline signals)
  */
 
-// Global variable for Alpha Vantage (used by market-data.js)
+// Global variable for Alpha Vantage
 var alphaVantageKey = null;
 
 // DOM Elements
@@ -147,7 +148,7 @@ function toggleTheme() {
     }
 }
 
-// Lot size calculation (used after signal)
+// Lot size calculation
 function calculateLotSize(entry, sl, balance, riskPercent) {
     if (!entry || !sl) return 0.01;
     const riskAmount = balance * (riskPercent / 100);
@@ -173,11 +174,11 @@ function startAutoTracking() {
             
             for (const trade of openTrades) {
                 if (trade.status !== 'OPEN') continue;
-                if (trade.bias === 'BUY' && price >= trade.tp) {
-                    if (typeof recordFeedback === 'function') recordFeedback(trade.id, 'WIN', 'Auto: TP hit');
-                    showToast(`${trade.symbol} - TP HIT! WIN.`, 'success');
-                }
-                else if (trade.bias === 'SELL' && price <= trade.tp) {
+                // check both TP levels – for simplicity, we treat either TP as a win
+                let hitTP = false;
+                if (trade.bias === 'BUY' && (price >= trade.tp1 || price >= trade.tp2)) hitTP = true;
+                if (trade.bias === 'SELL' && (price <= trade.tp1 || price <= trade.tp2)) hitTP = true;
+                if (hitTP) {
                     if (typeof recordFeedback === 'function') recordFeedback(trade.id, 'WIN', 'Auto: TP hit');
                     showToast(`${trade.symbol} - TP HIT! WIN.`, 'success');
                 }
@@ -213,6 +214,35 @@ async function getGeminiExplanation(apiKey) {
     } catch(e) { return null; }
 }
 
+// Upgrade 9: AI final check for borderline signals (confidence 65-75)
+async function geminiFinalCheck(apiKey, data, signal) {
+    if (!apiKey) return { approved: true };
+    if (signal.confidence < 65 || signal.confidence > 75) return { approved: true };
+    
+    const prompt = `You are a risk officer. Analyze this trade setup:
+Symbol: ${data.symbol}
+Price: ${data.currentPrice}
+RSI: ${data.rsi.toFixed(1)}
+Support: ${data.support}, Resistance: ${data.resistance}
+Proposed signal: ${signal.bias} with confidence ${signal.confidence}%
+
+Answer ONLY with "APPROVE" or "REJECT". If REJECT, give one short reason.`;
+    
+    try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.1, maxOutputTokens: 50 } })
+        });
+        const result = await response.json();
+        const answer = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        if (answer.includes('REJECT')) {
+            return { approved: false, reason: answer };
+        }
+        return { approved: true };
+    } catch(e) { return { approved: true }; }
+}
+
 // Main Analysis – uses advanced StrategyEngine
 async function analyze() {
     const apiKey = document.getElementById('apiKey').value;
@@ -229,7 +259,6 @@ async function analyze() {
         elements.currentPrice.textContent = currentData.currentPrice.toFixed(currentData.digits || 2);
         elements.updateTime.textContent = `Updated: ${new Date().toLocaleTimeString()}`;
         
-        // Fetch DXY data for filter (used by StrategyEngine)
         let dxyData = null;
         try {
             dxyData = await MarketData.fetchDXY();
@@ -238,8 +267,16 @@ async function analyze() {
         const balance = parseFloat(document.getElementById('balance').value);
         const riskPercent = parseFloat(document.getElementById('riskPercent').value);
         
-        // Use the advanced StrategyEngine (external file)
         currentSignal = await StrategyEngine.analyze(currentData, currentMode, { dxyData });
+        
+        // Upgrade 9: AI final check
+        const aiCheck = await geminiFinalCheck(apiKey, currentData, currentSignal);
+        if (!aiCheck.approved) {
+            currentSignal.bias = 'WAIT';
+            currentSignal.confidence = 40;
+            currentSignal.primaryStrategy = `AI Rejected: ${aiCheck.reason}`;
+            showToast(`AI filter rejected: ${aiCheck.reason}`, 'warning');
+        }
         
         elements.signalBias.textContent = currentSignal.bias;
         elements.signalBias.className = `text-7xl font-black italic ${
@@ -248,46 +285,34 @@ async function analyze() {
         }`;
         elements.confidenceText.textContent = `${currentSignal.confidence}% confidence`;
         
-        // Calculate trade levels using RiskManager (if available) or simple logic
-        let entry = null, sl = null, tp = null;
+        // Calculate trade levels using RiskManager
+        let tradeLevels = null;
         if (currentSignal.bias !== 'WAIT') {
-            // Use the same level calculation as before (can also use RiskManager if imported)
-            const support = currentData.support;
-            const resistance = currentData.resistance;
-            if (currentSignal.bias === 'BUY') {
-                entry = currentData.currentPrice;
-                sl = support * 0.998;
-                const targetRR = currentMode === 'scalp' ? 1.5 : 4.0;
-                const risk = entry - sl;
-                tp = entry + (risk * targetRR);
-                if (tp > resistance) tp = resistance * 0.998;
-            } else if (currentSignal.bias === 'SELL') {
-                entry = currentData.currentPrice;
-                sl = resistance * 1.002;
-                const targetRR = currentMode === 'scalp' ? 1.5 : 4.0;
-                const risk = sl - entry;
-                tp = entry - (risk * targetRR);
-                if (tp < support) tp = support * 1.002;
-            }
+            tradeLevels = RiskManager.calculateTradeLevels(currentData, currentSignal, currentMode, { balance, riskPercent });
         }
         
-        if (currentSignal.bias !== 'WAIT' && entry && sl && tp) {
-            currentTradeLevels = { entry, stopLoss: sl, takeProfit: tp };
-            elements.entryPrice.textContent = entry.toFixed(currentData.digits || 5);
-            elements.stopLoss.textContent = sl.toFixed(currentData.digits || 5);
-            elements.takeProfit.textContent = tp.toFixed(currentData.digits || 5);
+        if (currentSignal.bias !== 'WAIT' && tradeLevels && tradeLevels.entry && tradeLevels.stopLoss && tradeLevels.takeProfit1 && tradeLevels.takeProfit2) {
+            currentTradeLevels = tradeLevels;
+            elements.entryPrice.textContent = tradeLevels.entry;
+            elements.stopLoss.textContent = tradeLevels.stopLoss;
+            // Upgrade 6: display both TPs
+            elements.takeProfit.textContent = `${tradeLevels.takeProfit1} / ${tradeLevels.takeProfit2}`;
             
-            const lotSize = calculateLotSize(entry, sl, balance, riskPercent);
+            const lotSize = calculateLotSize(tradeLevels.entry, tradeLevels.stopLoss, balance, riskPercent);
             elements.lotSize.textContent = lotSize.toFixed(2);
             
-            const risk = Math.abs(entry - sl);
-            const reward = Math.abs(tp - entry);
+            const risk = Math.abs(tradeLevels.entry - tradeLevels.stopLoss);
+            const reward = Math.abs(tradeLevels.takeProfit2 - tradeLevels.entry);
             const rr = risk > 0 ? (reward / risk).toFixed(1) : 0;
             elements.rrValue.textContent = `1:${rr}`;
             elements.tradeType.textContent = currentMode === 'scalp' ? 'SCALP' : 'DAY';
             elements.poiBox.classList.add('hidden');
             
-            if (typeof addOpenTrade === 'function') addOpenTrade(currentSignal, currentData, currentTradeLevels);
+            if (typeof addOpenTrade === 'function') {
+                // adapt to pass both TP levels
+                const adaptedTrade = { ...tradeLevels, takeProfit: tradeLevels.takeProfit2 };
+                addOpenTrade(currentSignal, currentData, adaptedTrade);
+            }
             if (autoTrackingEnabled) startAutoTracking();
             
             const geminiText = await getGeminiExplanation(apiKey);
@@ -299,7 +324,6 @@ async function analyze() {
             elements.takeProfit.textContent = '--';
             elements.lotSize.textContent = '--';
             elements.rrValue.textContent = '0:0';
-            // Show POI from RiskManager if available, else simple
             const poi = currentData.currentPrice;
             elements.poiLevel.textContent = poi.toFixed(currentData.digits || 2);
             elements.poiLogic.textContent = currentSignal.reasons?.[0] || 'Insufficient confluence. Wait for better setup.';
