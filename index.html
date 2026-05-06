@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>OMNI—SUPREME | V1.0</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        :root {
+            --bg-primary: #05080f;
+            --bg-secondary: #0a0f1a;
+            --bg-card: #0f1522;
+            --accent-buy: #00ff88;
+            --accent-sell: #ff4466;
+            --accent-wait: #ffaa00;
+            --accent-primary: #6366f1;
+            --border-subtle: rgba(255,255,255,0.06);
+        }
+        
+        body {
+            background: var(--bg-primary);
+            color: #e8edf5;
+            font-family: 'Inter', sans-serif;
+            overflow-x: hidden;
+        }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: var(--bg-secondary); }
+        ::-webkit-scrollbar-thumb { background: var(--accent-primary); border-radius: 10px; }
+        
+        /* Glass Morphism */
+        .glass {
+            background: rgba(15, 21, 34, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-subtle);
+        }
+        
+        .glass-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 2rem;
+        }
+        
+        /* Mode Toggle */
+        .mode-toggle {
+            position: relative;
+            background: var(--bg-secondary);
+            border-radius: 3rem;
+            padding: 4px;
+        }
+        
+        .mode-option {
+            padding: 0.75rem 2rem;
+            border-radius: 2.5rem;
+            font-weight: 800;
+            font-size: 0.7rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            color: #4a5568;
+        }
+        
+        .mode-option.active {
+            background: linear-gradient(135deg, var(--accent-primary), #4338ca);
+            color: white;
+            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
+        }
+        
+        /* Signal Display */
+        .signal-buy { color: var(--accent-buy); text-shadow: 0 0 20px rgba(0,255,136,0.3); }
+        .signal-sell { color: var(--accent-sell); text-shadow: 0 0 20px rgba(255,68,102,0.3); }
+        .signal-wait { color: var(--accent-wait); text-shadow: 0 0 20px rgba(255,170,0,0.3); }
+        
+        /* Pulse Animation for Loading */
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .loading-pulse { animation: pulse 1.5s ease-in-out infinite; }
+        
+        /* Value Display */
+        .value-large {
+            font-size: 2.5rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+        }
+        
+        /* Responsive */
+        @media (max-width: 640px) {
+            .value-large { font-size: 1.75rem; }
+            .glass-card { padding: 1rem; }
+        }
+        
+        /* Loading Overlay */
+        #loadingOverlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(5, 8, 15, 0.95);
+            backdrop-filter: blur(8px);
+            z-index: 1000;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+        
+        /* Input Styling */
+        .input-dark {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 1rem;
+            padding: 0.75rem 1rem;
+            color: white;
+            outline: none;
+            transition: all 0.2s;
+        }
+        
+        .input-dark:focus {
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 10px rgba(99,102,241,0.2);
+        }
+        
+        /* Metric Badge */
+        .metric-badge {
+            background: rgba(99,102,241,0.1);
+            border: 1px solid rgba(99,102,241,0.2);
+            border-radius: 1rem;
+            padding: 0.5rem 0.75rem;
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay">
+        <div class="text-center">
+            <i class="fa-solid fa-microchip fa-4x text-indigo-500 mb-4"></i>
+            <p class="text-indigo-400 font-bold tracking-wider loading-pulse">COUNCIL OF 8 ANALYZING...</p>
+            <p class="text-xs text-slate-500 mt-2">Scanning 8 strategies simultaneously</p>
+        </div>
+    </div>
+
+    <!-- Main Container -->
+    <div class="max-w-6xl mx-auto">
+        
+        <!-- Header -->
+        <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+            <div>
+                <h1 class="text-4xl md:text-5xl font-black italic tracking-tighter bg-gradient-to-r from-indigo-400 via-cyan-400 to-indigo-400 bg-clip-text text-transparent">
+                    OMNI—SUPREME
+                </h1>
+                <p class="text-[8px] font-black text-indigo-400/60 uppercase tracking-[0.3em] mt-2">
+                    8-CORE AGGREGATOR | V1.0 | GEMINI 2.5 FLASH
+                </p>
+            </div>
+            <button id="settingsBtn" class="w-12 h-12 glass rounded-2xl flex items-center justify-center hover:bg-white/5 transition-all">
+                <i class="fa-solid fa-sliders-h text-slate-400 text-xl"></i>
+            </button>
+        </header>
+
+        <!-- Mode Selection -->
+        <div class="mb-8">
+            <div class="mode-toggle flex w-full max-w-xs mx-auto md:mx-0">
+                <div id="modeScalp" class="mode-option flex-1 text-center active">⚡ SCALPING</div>
+                <div id="modeDay" class="mode-option flex-1 text-center">📊 DAY TRADING</div>
+            </div>
+            <p id="modeDescription" class="text-center text-xs text-slate-500 mt-3">
+                Aggressive setups | 1:1.5 to 1:4 RR | Lower-Medium Risk
+            </p>
+        </div>
+
+        <!-- Symbol Input & Quick Select -->
+        <div class="glass-card p-5 mb-8">
+            <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2 block">TRADING SYMBOL</label>
+            <div class="flex flex-col md:flex-row gap-3">
+                <input type="text" id="symbolInput" value="XAUUSD" class="input-dark flex-1 text-lg font-mono">
+                <div class="flex gap-2 flex-wrap">
+                    <button data-sym="XAUUSD" class="quick-sym px-4 py-2 glass rounded-xl text-xs font-bold hover:bg-indigo-500/20 transition-all">🪙 XAUUSD</button>
+                    <button data-sym="EURUSD" class="quick-sym px-4 py-2 glass rounded-xl text-xs font-bold hover:bg-indigo-500/20 transition-all">💶 EURUSD</button>
+                    <button data-sym="GBPUSD" class="quick-sym px-4 py-2 glass rounded-xl text-xs font-bold hover:bg-indigo-500/20 transition-all">💷 GBPUSD</button>
+                    <button data-sym="BTCUSD" class="quick-sym px-4 py-2 glass rounded-xl text-xs font-bold hover:bg-indigo-500/20 transition-all">₿ BTCUSD</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Key Metrics Row -->
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-8">
+            <div class="glass-card p-4 text-center">
+                <p class="text-[9px] text-slate-500 uppercase font-black tracking-wider">Current</p>
+                <p id="currentPrice" class="text-xl font-bold font-mono">--</p>
+            </div>
+            <div class="glass-card p-4 text-center">
+                <p class="text-[9px] text-slate-500 uppercase font-black tracking-wider">RSI (14)</p>
+                <p id="rsiValue" class="text-xl font-bold font-mono">--</p>
+            </div>
+            <div class="glass-card p-4 text-center">
+                <p class="text-[9px] text-slate-500 uppercase font-black tracking-wider">ATR (14)</p>
+                <p id="atrValue" class="text-xl font-bold font-mono">--</p>
+            </div>
+            <div class="glass-card p-4 text-center">
+                <p class="text-[9px] text-slate-500 uppercase font-black tracking-wider">24H High</p>
+                <p id="highValue" class="text-xl font-bold font-mono text-emerald-400">--</p>
+            </div>
+            <div class="glass-card p-4 text-center">
+                <p class="text-[9px] text-slate-500 uppercase font-black tracking-wider">24H Low</p>
+                <p id="lowValue" class="text-xl font-bold font-mono text-rose-400">--</p>
+            </div>
+        </div>
+
+        <!-- Main Signal Card -->
+        <div class="glass-card p-6 md:p-8 mb-8">
+            <div class="flex justify-between items-start mb-6 flex-wrap gap-3">
+                <div>
+                    <p class="text-[9px] text-slate-500 uppercase font-black tracking-wider">TRADE BIAS</p>
+                    <h2 id="signalBias" class="text-6xl md:text-7xl font-black italic tracking-tighter signal-wait">--</h2>
+                </div>
+                <div class="text-right">
+                    <p class="text-[9px] text-slate-500 uppercase font-black tracking-wider">CONFIDENCE</p>
+                    <p id="confidenceScore" class="text-3xl font-black text-indigo-400">--</p>
+                </div>
+            </div>
+            
+            <!-- Trade Details Grid -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div class="bg-black/30 rounded-2xl p-4 text-center">
+                    <p class="text-[8px] text-slate-500 uppercase font-black tracking-wider">ENTRY</p>
+                    <p id="entryPrice" class="text-2xl font-black font-mono">--</p>
+                </div>
+                <div class="bg-black/30 rounded-2xl p-4 text-center">
+                    <p class="text-[8px] text-slate-500 uppercase font-black tracking-wider">STOP LOSS</p>
+                    <p id="stopLoss" class="text-2xl font-black font-mono text-rose-400">--</p>
+                </div>
+                <div class="bg-black/30 rounded-2xl p-4 text-center">
+                    <p class="text-[8px] text-slate-500 uppercase font-black tracking-wider">TAKE PROFIT</p>
+                    <p id="takeProfit" class="text-2xl font-black font-mono text-emerald-400">--</p>
+                </div>
+                <div class="bg-black/30 rounded-2xl p-4 text-center">
+                    <p class="text-[8px] text-slate-500 uppercase font-black tracking-wider">LOT SIZE (XM)</p>
+                    <p id="lotSize" class="text-2xl font-black font-mono text-cyan-400">--</p>
+                </div>
+            </div>
+            
+            <!-- Risk/Reward & Strategy Info -->
+            <div class="flex justify-between items-center flex-wrap gap-3 mb-6 p-4 bg-black/20 rounded-2xl">
+                <div class="flex gap-4">
+                    <div class="metric-badge">
+                        📐 RR: <span id="rrRatio" class="font-bold text-emerald-400">0:0</span>
+                    </div>
+                    <div class="metric-badge">
+                        🎯 Trade Type: <span id="tradeType" class="font-bold text-cyan-400">--</span>
+                    </div>
+                    <div class="metric-badge">
+                        📈 Asset: <span id="assetClass" class="font-bold">--</span>
+                    </div>
+                </div>
+                <div class="metric-badge">
+                    <i class="fa-solid fa-microchip text-[10px]"></i> Strategy: <span id="activeStrategy" class="font-bold">Council of 8</span>
+                </div>
+            </div>
+            
+            <!-- Logic / Reasoning -->
+            <div class="bg-indigo-500/5 border border-indigo-500/10 rounded-2xl p-5 mb-4">
+                <p class="text-[9px] text-indigo-400 uppercase font-black tracking-wider mb-2">⚡ SURGICAL LOGIC</p>
+                <p id="logicText" class="text-sm leading-relaxed text-slate-300">Waiting for market data...</p>
+            </div>
+            
+            <!-- POI Protocol (Shown only on WAIT) -->
+            <div id="poiContainer" class="hidden bg-amber-500/5 border border-amber-500/20 rounded-2xl p-5">
+                <p class="text-[9px] text-amber-500 uppercase font-black tracking-wider mb-2">📍 POINT OF INTEREST (POI)</p>
+                <p id="poiLevel" class="text-2xl font-black font-mono text-amber-400 mb-2">--</p>
+                <p id="poiLogic" class="text-xs text-slate-400">Await price reaching this level before re-scanning.</p>
+            </div>
+            
+            <!-- Disclaimer -->
+            <p class="text-[9px] text-slate-600 text-center mt-6">
+                ⚠️ EDUCATIONAL ONLY | Signals generated by 8-core AI analysis | You execute trades on XM
+            </p>
+        </div>
+
+        <!-- Action Button -->
+        <button id="analyzeBtn" class="w-full py-5 rounded-2xl font-black text-sm uppercase tracking-wider transition-all"
+            style="background: linear-gradient(135deg, #6366f1, #4338ca); box-shadow: 0 4px 20px rgba(99,102,241,0.3);">
+            <i class="fa-solid fa-brain mr-2"></i> EXECUTE SURGICAL SCAN
+        </button>
+
+        <!-- Settings Drawer -->
+        <div id="settingsDrawer" class="fixed top-0 right-0 h-full w-full max-w-md bg-[#0a0f1a] z-50 transform translate-x-full transition-transform duration-300 shadow-2xl">
+            <div class="p-8">
+                <div class="flex justify-between items-center mb-8">
+                    <h3 class="text-xl font-black italic">⚙️ CONFIGURATION</h3>
+                    <button id="closeSettings" class="w-10 h-10 glass rounded-xl">✕</button>
+                </div>
+                
+                <div class="space-y-6">
+                    <div>
+                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">GEMINI API KEY</label>
+                        <input type="password" id="apiKey" class="input-dark w-full font-mono text-sm" placeholder="Enter your Gemini API key">
+                        <p class="text-[8px] text-slate-500 mt-1">Required for AI analysis | Get from aistudio.google.com</p>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">BALANCE ($)</label>
+                            <input type="number" id="balance" class="input-dark w-full" placeholder="10000" value="10000">
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">RISK %</label>
+                            <input type="number" id="riskPercent" class="input-dark w-full" placeholder="1.0" value="1.0" step="0.1">
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">FAILOVER MODEL</label>
+                        <select id="failoverModel" class="input-dark w-full">
+                            <option value="gemini-2.0-flash-lite">Gemini 2.0 Flash Lite (Free)</option>
+                            <option value="gemini-2.0-flash">Gemini 2.0 Flash (Faster)</option>
+                        </select>
+                    </div>
+                    
+                    <button id="saveSettings" class="w-full py-4 bg-indigo-600 rounded-xl font-black text-sm uppercase tracking-wider hover:bg-indigo-700 transition-all">
+                        SAVE & SECURE
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Overlay for drawer -->
+        <div id="drawerOverlay" class="fixed inset-0 bg-black/70 z-40 hidden"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="market-data.js"></script>
+    <script src="strategy-engine.js"></script>
+    <script src="risk-manager.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
