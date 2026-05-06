@@ -1,13 +1,8 @@
 /**
- * OMNI-SIGNAL - Main Application (with credit‑efficient auto tracking)
- * All advanced features: StrategyEngine, partial profits, AI final check, DXY filter.
- * Auto tracking uses cached market data – never makes extra API calls.
+ * OMNI-SIGNAL - Main Application (credit‑efficient auto tracking)
+ * Supports all XM assets: XAUUSD, XAGUSD, OILCash, EURUSD, GBPUSD, BTCUSD, ETHUSD
  */
 
-// Global variable for Alpha Vantage (kept for compatibility)
-var alphaVantageKey = null;
-
-// DOM Elements
 const elements = {
     analyzeBtn: document.getElementById('analyzeBtn'),
     symbolSelect: document.getElementById('symbolSelect'),
@@ -35,7 +30,6 @@ const elements = {
     autoTrackStatus: document.getElementById('autoTrackStatus')
 };
 
-// App State
 let currentMode = 'scalp';
 let currentSymbol = 'XAUUSD';
 let currentData = null;
@@ -44,22 +38,20 @@ let currentTradeLevels = null;
 let autoTrackInterval = null;
 let autoTrackingEnabled = true;
 
-// Load settings from localStorage
 function loadSettings() {
     const saved = localStorage.getItem('omni_signal_config');
     if (saved) {
         try {
             const config = JSON.parse(saved);
-            document.getElementById('apiKey').value = config.apiKey || '';
-            document.getElementById('twelveDataKey').value = config.twelveDataKey || '';
-            document.getElementById('alphaKey').value = config.alphaKey || '';
-            document.getElementById('balance').value = config.balance || '10000';
-            document.getElementById('riskPercent').value = config.riskPercent || '1.0';
-            document.getElementById('modeSelect').value = config.mode || 'scalp';
-            document.getElementById('autoTrackSelect').value = config.autoTrack || 'on';
+            if (document.getElementById('apiKey')) document.getElementById('apiKey').value = config.apiKey || '';
+            if (document.getElementById('twelveDataKey')) document.getElementById('twelveDataKey').value = config.twelveDataKey || '';
+            if (document.getElementById('alphaKey')) document.getElementById('alphaKey').value = config.alphaKey || '';
+            if (document.getElementById('balance')) document.getElementById('balance').value = config.balance || '10000';
+            if (document.getElementById('riskPercent')) document.getElementById('riskPercent').value = config.riskPercent || '1.0';
+            if (document.getElementById('modeSelect')) document.getElementById('modeSelect').value = config.mode || 'scalp';
+            if (document.getElementById('autoTrackSelect')) document.getElementById('autoTrackSelect').value = config.autoTrack || 'on';
             currentMode = config.mode || 'scalp';
             autoTrackingEnabled = config.autoTrack !== 'off';
-            
             if (typeof MarketData !== 'undefined' && config.twelveDataKey) {
                 MarketData.setApiKey(config.twelveDataKey);
             }
@@ -78,17 +70,14 @@ function saveSettings() {
         autoTrack: document.getElementById('autoTrackSelect').value
     };
     localStorage.setItem('omni_signal_config', JSON.stringify(config));
-    
     if (typeof MarketData !== 'undefined' && config.twelveDataKey) {
         MarketData.setApiKey(config.twelveDataKey);
     }
-    
     currentMode = config.mode;
     autoTrackingEnabled = config.autoTrack !== 'off';
     updateAutoTrackStatus();
     closeDrawer();
     showToast('Settings saved!', 'success');
-    
     if (autoTrackingEnabled && currentTradeLevels) {
         startAutoTracking();
     } else {
@@ -125,7 +114,6 @@ function showLoading(show) {
     elements.loadingOverlay.style.display = show ? 'flex' : 'none';
 }
 
-// Theme
 function initTheme() {
     const saved = localStorage.getItem('omni_theme');
     if (saved === 'light') {
@@ -150,7 +138,6 @@ function toggleTheme() {
     }
 }
 
-// Lot size calculation (used after signal)
 function calculateLotSize(entry, sl, balance, riskPercent) {
     if (!entry || !sl) return 0.01;
     const riskAmount = balance * (riskPercent / 100);
@@ -161,7 +148,7 @@ function calculateLotSize(entry, sl, balance, riskPercent) {
     return Math.max(0.01, Math.min(lot, 10));
 }
 
-// Auto Price Tracking – optimised to use cache (no extra API calls)
+// --- CREDIT-EFFICIENT AUTO TRACKING ---
 function startAutoTracking() {
     if (autoTrackInterval) clearInterval(autoTrackInterval);
     if (!autoTrackingEnabled) return;
@@ -170,31 +157,27 @@ function startAutoTracking() {
         const openTrades = typeof getOpenTradesForTracking === 'function' ? getOpenTradesForTracking() : [];
         if (openTrades.length === 0) return;
         
-        try {
-            // This fetch() returns cached data if fresh (no API call)
-            const currentPriceData = await MarketData.fetch(currentSymbol);
-            if (!currentPriceData) return;
-            const price = currentPriceData.currentPrice;
-            
-            for (const trade of openTrades) {
-                if (trade.status !== 'OPEN') continue;
-                let hitTP = false;
-                if (trade.bias === 'BUY' && (price >= trade.tp1 || price >= trade.tp2)) hitTP = true;
-                if (trade.bias === 'SELL' && (price <= trade.tp1 || price <= trade.tp2)) hitTP = true;
-                if (hitTP) {
-                    if (typeof recordFeedback === 'function') recordFeedback(trade.id, 'WIN', 'Auto: TP hit');
-                    showToast(`${trade.symbol} - TP HIT! WIN.`, 'success');
-                }
-                else if (trade.bias === 'BUY' && price <= trade.sl) {
-                    if (typeof recordFeedback === 'function') recordFeedback(trade.id, 'LOSS', 'Auto: SL hit');
-                    showToast(`${trade.symbol} - SL HIT! LOSS.`, 'error');
-                }
-                else if (trade.bias === 'SELL' && price >= trade.sl) {
-                    if (typeof recordFeedback === 'function') recordFeedback(trade.id, 'LOSS', 'Auto: SL hit');
-                    showToast(`${trade.symbol} - SL HIT! LOSS.`, 'error');
-                }
+        const price = await MarketData.fetchPriceForTracking(currentSymbol);
+        if (price === null) return;
+        
+        for (const trade of openTrades) {
+            if (trade.status !== 'OPEN') continue;
+            let hitTP = false;
+            if (trade.bias === 'BUY' && (price >= trade.tp1 || price >= trade.tp2)) hitTP = true;
+            if (trade.bias === 'SELL' && (price <= trade.tp1 || price <= trade.tp2)) hitTP = true;
+            if (hitTP) {
+                if (typeof recordFeedback === 'function') recordFeedback(trade.id, 'WIN', 'Auto: TP hit');
+                showToast(`${trade.symbol} - TP HIT! WIN.`, 'success');
             }
-        } catch (e) { console.log('Auto-track error:', e); }
+            else if (trade.bias === 'BUY' && price <= trade.sl) {
+                if (typeof recordFeedback === 'function') recordFeedback(trade.id, 'LOSS', 'Auto: SL hit');
+                showToast(`${trade.symbol} - SL HIT! LOSS.`, 'error');
+            }
+            else if (trade.bias === 'SELL' && price >= trade.sl) {
+                if (typeof recordFeedback === 'function') recordFeedback(trade.id, 'LOSS', 'Auto: SL hit');
+                showToast(`${trade.symbol} - SL HIT! LOSS.`, 'error');
+            }
+        }
     }, 30000);
 }
 
@@ -202,7 +185,6 @@ function stopAutoTracking() {
     if (autoTrackInterval) { clearInterval(autoTrackInterval); autoTrackInterval = null; }
 }
 
-// Gemini Explanation (optional)
 async function getGeminiExplanation(apiKey) {
     if (!apiKey) return null;
     const prompt = `Explain this trade signal in 10-15 words: ${currentSymbol} price ${currentData?.currentPrice}. RSI ${currentData?.rsi?.toFixed(1)}. Signal: ${currentSignal?.bias} with ${currentSignal?.confidence}% confidence. ${currentSignal?.conditionsDetected || ''}`;
@@ -217,7 +199,6 @@ async function getGeminiExplanation(apiKey) {
     } catch(e) { return null; }
 }
 
-// AI final check for borderline signals
 async function geminiFinalCheck(apiKey, data, signal) {
     if (!apiKey) return { approved: true };
     if (signal.confidence < 65 || signal.confidence > 75) return { approved: true };
@@ -242,7 +223,6 @@ Answer ONLY with "APPROVE" or "REJECT". If REJECT, give one short reason.`;
     } catch(e) { return { approved: true }; }
 }
 
-// Main Analysis
 async function analyze() {
     const apiKey = document.getElementById('apiKey').value;
     if (!apiKey) { openDrawer(); showToast('Please enter your Gemini API key', 'error'); return; }
@@ -283,7 +263,6 @@ async function analyze() {
         }`;
         elements.confidenceText.textContent = `${currentSignal.confidence}% confidence`;
         
-        // Use RiskManager for trade levels (includes partial profits)
         let tradeLevels = null;
         if (currentSignal.bias !== 'WAIT') {
             tradeLevels = RiskManager.calculateTradeLevels(currentData, currentSignal, currentMode, { balance, riskPercent });
@@ -334,7 +313,6 @@ async function analyze() {
     } finally { showLoading(false); }
 }
 
-// Event Listeners
 function init() {
     loadSettings();
     initTheme();
@@ -353,5 +331,4 @@ function init() {
     showToast('App ready. Advanced strategy engine active.', 'info');
 }
 
-// Start app
 init();
