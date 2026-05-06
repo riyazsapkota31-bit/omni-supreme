@@ -1,14 +1,13 @@
 /**
- * MARKET DATA FETCHER – Alpha Vantage (primary) with full indicators + optional WebSocket
- * - Fetches daily time series to calculate RSI, EMAs, support/resistance
- * - Uses current price from latest quote
- * - Twelve Data WebSocket overrides price only (optional)
+ * MARKET DATA FETCHER – Alpha Vantage (primary) + optional Twelve Data WebSocket (real‑time)
+ * - Alpha Vantage: daily historical data → calculates RSI, EMAs, support/resistance
+ * - WebSocket (Twelve Data) overrides price for XAUUSD, XAGUSD, OILCash if connected
+ * - Fallback: Yahoo Finance
  */
 
 const MarketData = {
     alphaKey: null,
     twelveKey: null,
-
     ws: null,
     wsConnected: false,
     realtimePrices: {},
@@ -36,21 +35,19 @@ const MarketData = {
         return resp.json();
     },
 
-    // ---- Fetch historical daily prices and calculate indicators ----
+    // ----- Historical data from Alpha Vantage -----
     async fetchHistoricalData(symbol) {
         const key = this.getAlphaKey();
         if (!key) throw new Error('No Alpha Vantage key');
-        // Use DAILY adjusted (or DAILY) – free tier allows 5 calls/min
         const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${symbol}&outputsize=compact&apikey=${key}`;
         const data = await this.fetchWithProxy(url);
         const timeSeries = data['Time Series (Daily)'];
         if (!timeSeries) throw new Error('No daily data');
-        const dates = Object.keys(timeSeries).sort(); // oldest first
+        const dates = Object.keys(timeSeries).sort();
         const closes = dates.map(d => parseFloat(timeSeries[d]['4. close']));
         return closes;
     },
 
-    // ---- Calculate RSI from array of prices ----
     calcRSI(closes, period = 14) {
         if (closes.length < period + 1) return 50;
         let gains = 0, losses = 0;
@@ -69,14 +66,13 @@ const MarketData = {
     calcEMA(prices, period) {
         if (prices.length < period) return prices[prices.length-1];
         const k = 2 / (period + 1);
-        let ema = prices.slice(0, period).reduce((a,b) => a+b,0)/period;
+        let ema = prices.slice(0, period).reduce((a,b) => a+b,0) / period;
         for (let i = period; i < prices.length; i++) {
             ema = prices[i] * k + ema * (1 - k);
         }
         return ema;
     },
 
-    // ---- Fetch current quote (price) ----
     async fetchCurrentQuote(symbol) {
         const key = this.getAlphaKey();
         const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${key}`;
@@ -90,36 +86,27 @@ const MarketData = {
         };
     },
 
-    // ---- Main fetch (combines historical indicators + current price) ----
+    // ----- Main fetch (Alpha Vantage indicators + price) -----
     async fetch(xmSymbol) {
         const info = this.assetInfo[xmSymbol];
         if (!info) return null;
-
-        const cacheKey = xmSymbol;
-        const cached = this.restCache[cacheKey];
+        const cached = this.restCache[xmSymbol];
         if (cached && (Date.now() - cached.ts) < 60000) return cached.data;
 
         try {
-            // Get historical closes for indicators (only for commodities and forex – for crypto we can skip or use same)
             let closes = [];
             if (xmSymbol === 'XAUUSD' || xmSymbol === 'XAGUSD' || xmSymbol === 'OILCash' ||
                 xmSymbol === 'EURUSD' || xmSymbol === 'GBPUSD') {
                 closes = await this.fetchHistoricalData(xmSymbol);
-            } else {
-                // For crypto, we'll use a simple fallback (or you can add Binance later)
-                closes = [];
             }
-            
-            // Get current quote
             const quote = await this.fetchCurrentQuote(xmSymbol);
-            const currentPrice = quote.price;
+            const price = quote.price;
 
-            let rsi = 50, ema20 = currentPrice, ema50 = currentPrice, ema200 = currentPrice;
-            let support = currentPrice * 0.99, resistance = currentPrice * 1.01;
-            let trend = 'SIDEWAYS', atr = currentPrice * 0.005, volatility = 0.5;
+            let rsi = 50, ema20 = price, ema50 = price, ema200 = price;
+            let support = price * 0.99, resistance = price * 1.01, trend = 'SIDEWAYS';
+            let atr = price * 0.005, volatility = 0.5;
 
             if (closes.length >= 50) {
-                // Calculate indicators from historical data
                 rsi = this.calcRSI(closes);
                 ema20 = this.calcEMA(closes, 20);
                 ema50 = this.calcEMA(closes, 50);
@@ -128,84 +115,57 @@ const MarketData = {
                 resistance = Math.max(...closes.slice(-50)) * 1.002;
                 if (ema20 > ema50 && ema50 > ema200) trend = 'BULLISH';
                 else if (ema20 < ema50 && ema50 < ema200) trend = 'BEARISH';
-                else trend = 'SIDEWAYS';
-                // Simple ATR approximation using daily range (not perfect but enough)
                 atr = (Math.max(...closes.slice(-14)) - Math.min(...closes.slice(-14))) / 14;
-                volatility = (atr / currentPrice) * 100;
+                volatility = (atr / price) * 100;
             }
 
             const result = {
-                currentPrice,
-                prevClose: quote.prevClose,
-                dailyChange: quote.changePercent,
-                high24h: currentPrice * 1.005,
-                low24h: currentPrice * 0.995,
-                volumeSpike: false,
-                rsi,
-                atr,
-                ema20,
-                ema50,
-                ema200,
-                support,
-                resistance,
-                trend,
-                volatility,
-                ...info,
-                _source: 'Alpha Vantage (with indicators)'
+                currentPrice: price, prevClose: quote.prevClose, dailyChange: quote.changePercent,
+                high24h: price * 1.005, low24h: price * 0.995, volumeSpike: false,
+                rsi, atr, ema20, ema50, ema200, support, resistance, trend, volatility,
+                ...info, _source: 'Alpha Vantage (with indicators)'
             };
-            this.restCache[cacheKey] = { data: result, ts: Date.now() };
+            this.restCache[xmSymbol] = { data: result, ts: Date.now() };
             return result;
         } catch (err) {
-            console.warn('Alpha Vantage historical fetch failed:', err);
-            // Fallback to simple quote (no indicators) but still try to give a signal
+            console.warn('Alpha Vantage failed:', err);
+            // fallback: price only
             try {
                 const quote = await this.fetchCurrentQuote(xmSymbol);
                 return {
-                    currentPrice: quote.price,
-                    prevClose: quote.prevClose,
-                    dailyChange: quote.changePercent,
-                    high24h: quote.price * 1.005,
-                    low24h: quote.price * 0.995,
-                    volumeSpike: false,
-                    rsi: 50,
-                    atr: quote.price * 0.001,
-                    ema20: quote.price,
-                    ema50: quote.price,
-                    ema200: quote.price,
-                    support: quote.price * 0.998,
-                    resistance: quote.price * 1.002,
-                    trend: 'SIDEWAYS',
-                    volatility: 0.3,
-                    ...info,
-                    _source: 'Alpha Vantage (price only)'
+                    currentPrice: quote.price, prevClose: quote.prevClose, dailyChange: quote.changePercent,
+                    high24h: quote.price * 1.005, low24h: quote.price * 0.995, volumeSpike: false,
+                    rsi: 50, atr: quote.price * 0.001, ema20: quote.price, ema50: quote.price, ema200: quote.price,
+                    support: quote.price * 0.998, resistance: quote.price * 1.002, trend: 'SIDEWAYS', volatility: 0.3,
+                    ...info, _source: 'Alpha Vantage (price only)'
                 };
-            } catch(e) {
-                return null;
-            }
+            } catch(e) { return null; }
         }
     },
 
-    // ---- WebSocket for real‑time price override (optional) ----
+    // ----- WebSocket (Twelve Data) with corrected endpoint -----
     initWebSocket() {
         const key = this.getTwelveKey();
         if (!key) return;
         if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return;
-        const wsUrl = `wss://ws.twelvedata.com/v1/quotes?apikey=${key}`;
+        const wsUrl = `wss://ws.twelvedata.com/v1/quotes/price?apikey=${key}`;
         this.ws = new WebSocket(wsUrl);
         this.ws.onopen = () => {
+            console.log('Twelve Data WebSocket connected');
             this.wsConnected = true;
-            this.ws.send(JSON.stringify({ action: 'subscribe', symbols: ['XAUUSD', 'XAGUSD', 'CL'] }));
+            this.ws.send(JSON.stringify({ action: 'subscribe', params: { symbols: 'XAUUSD,XAGUSD,CL' } }));
         };
         this.ws.onmessage = (e) => {
             try {
                 const d = JSON.parse(e.data);
-                if (d.event === 'price' && d.symbol && d.price) {
+                if (d.symbol && d.price) {
                     this.realtimePrices[d.symbol] = { price: d.price, ts: Date.now() };
                 }
             } catch(err) {}
         };
-        this.ws.onerror = () => { this.wsConnected = false; };
+        this.ws.onerror = (err) => { console.warn('WebSocket error', err); this.wsConnected = false; };
         this.ws.onclose = () => {
+            console.log('WebSocket closed, reconnecting...');
             this.wsConnected = false;
             setTimeout(() => this.initWebSocket(), 10000);
         };
@@ -220,7 +180,6 @@ const MarketData = {
         return null;
     },
 
-    // ---- Final fetch used by app.js (with optional WebSocket override) ----
     async fetchRealtime(xmSymbol) {
         let data = await this.fetch(xmSymbol);
         if (!data) return null;
@@ -243,13 +202,9 @@ const MarketData = {
         return { dxyPrice: 0, dxyTrend: 'NEUTRAL', dxyStrength: 'NEUTRAL' };
     },
 
-    // Keep old method signatures for compatibility
     async fetch(symbol) {
         return this.fetchRealtime(symbol);
     }
 };
 
-// Auto‑start WebSocket if Twelve Data key exists
-if (MarketData.getTwelveKey()) {
-    MarketData.initWebSocket();
-}
+if (MarketData.getTwelveKey()) MarketData.initWebSocket();
