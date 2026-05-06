@@ -62,6 +62,7 @@
         .toast { position: fixed; bottom: 20px; right: 20px; background: var(--accent-primary); color: white; padding: 12px 20px; border-radius: 12px; font-size: 12px; font-weight: bold; z-index: 1100; animation: slideIn 0.3s ease-out; }
         .remove-symbol { opacity: 0.6; transition: opacity 0.2s; }
         .remove-symbol:hover { opacity: 1; }
+        .info-text { font-size: 9px; color: #64748b; margin-top: 4px; }
     </style>
 </head>
 <body class="p-4 md:p-8">
@@ -82,7 +83,7 @@
                     OMNI—SUPREME
                 </h1>
                 <p class="text-[8px] font-black text-indigo-400/60 uppercase tracking-[0.3em] mt-2">
-                    XM EDITION | 15 STRATEGIES | REAL-TIME DATA
+                    XM EDITION | 15 STRATEGIES | MULTI-API BACKUP
                 </p>
             </div>
             <div class="flex gap-3">
@@ -171,21 +172,21 @@
         <div id="settingsDrawer" class="fixed top-0 right-0 h-full w-full max-w-md bg-[#0a0f1a] z-50 transform translate-x-full transition-transform duration-300 shadow-2xl overflow-y-auto">
             <div class="p-8">
                 <div class="flex justify-between items-center mb-8">
-                    <h3 class="text-xl font-black italic">⚙️ XM CONFIGURATION</h3>
+                    <h3 class="text-xl font-black italic">⚙️ CONFIGURATION</h3>
                     <button id="closeSettings" class="w-10 h-10 glass rounded-xl">✕</button>
                 </div>
                 
                 <div class="space-y-6">
                     <div>
-                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">🔑 GEMINI API KEY</label>
+                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">🔑 GEMINI API KEY (Required)</label>
                         <input type="password" id="apiKey" class="input-dark w-full font-mono text-sm" placeholder="Enter your Gemini API key">
-                        <p class="text-[8px] text-slate-500 mt-1">Get from <a href="https://aistudio.google.com" target="_blank" class="text-indigo-400">aistudio.google.com</a></p>
+                        <p class="info-text">Get from <a href="https://aistudio.google.com" target="_blank" class="text-indigo-400">aistudio.google.com</a> | Free tier: 1500 requests/day</p>
                     </div>
                     
                     <div>
-                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">🏦 OANDA API KEY (for real-time forex + gold)</label>
-                        <input type="password" id="oandaKey" class="input-dark w-full font-mono text-sm" placeholder="Enter your OANDA API key">
-                        <p class="text-[8px] text-slate-500 mt-1">Get from <a href="https://developer.oanda.com" target="_blank" class="text-indigo-400">developer.oanda.com</a> | Select "Primary" account</p>
+                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">📊 ALPHA VANTAGE API KEY (Optional - Better Data)</label>
+                        <input type="password" id="alphaKey" class="input-dark w-full font-mono text-sm" placeholder="Enter your Alpha Vantage API key">
+                        <p class="info-text">Get FREE from <a href="https://www.alphavantage.co/support/#api-key" target="_blank" class="text-indigo-400">alphavantage.co/support/#api-key</a> | 1-2 min delay</p>
                     </div>
                     
                     <div class="grid grid-cols-2 gap-4">
@@ -203,10 +204,14 @@
                     </div>
                     
                     <div>
-                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">📱 TELEGRAM ALERTS</label>
+                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">📱 TELEGRAM ALERTS (Optional)</label>
                         <input type="text" id="telegramBotToken" class="input-dark w-full mb-2" placeholder="Bot Token">
                         <input type="text" id="telegramChatId" class="input-dark w-full" placeholder="Chat ID">
                         <button id="testTelegramBtn" class="mt-3 text-[10px] text-indigo-400 hover:text-indigo-300">Test Connection</button>
+                    </div>
+                    
+                    <div class="bg-indigo-500/10 rounded-xl p-3">
+                        <p class="text-[8px] text-slate-400 text-center">📡 Multi-API Backup: Alpha Vantage → Twelve Data → Binance → Yahoo</p>
                     </div>
                     
                     <button id="saveSettings" class="w-full py-4 bg-indigo-600 rounded-xl font-black text-sm uppercase tracking-wider hover:bg-indigo-700 transition-all">SAVE & SECURE</button>
