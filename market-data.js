@@ -174,7 +174,7 @@ const MarketData = {
         return { dxyPrice: 0, dxyTrend: 'NEUTRAL', dxyStrength: 'NEUTRAL' };
     },
 
-    // Technical indicators (unchanged)
+    // Technical indicators
     calcRSI(prices, period) {
         if (prices.length < period + 1) return 50;
         let gains = 0, losses = 0;
