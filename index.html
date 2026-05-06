@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -9,7 +9,6 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        
         :root {
             --bg-primary: #05080f;
             --bg-secondary: #0a0f1a;
@@ -22,7 +21,6 @@
             --text-primary: #e8edf5;
             --text-secondary: #8a99b0;
         }
-        
         [data-theme="light"] {
             --bg-primary: #f0f4f8;
             --bg-secondary: #ffffff;
@@ -31,7 +29,6 @@
             --text-primary: #1a202c;
             --text-secondary: #4a5568;
         }
-        
         body { background: var(--bg-primary); color: var(--text-primary); font-family: 'Inter', sans-serif; overflow-x: hidden; transition: all 0.3s ease; padding: 20px; }
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: var(--bg-secondary); }
@@ -72,14 +69,18 @@
     </div>
     <div class="space-y-4">
         <div>
-            <label class="text-[10px] font-bold text-slate-400">🔑 GEMINI API KEY</label>
+            <label class="text-[10px] font-bold text-slate-400">🔑 GEMINI API KEY (required)</label>
             <input type="password" id="apiKey" class="input-dark text-sm mt-1" placeholder="Paste your Gemini API key">
             <p class="text-[8px] text-slate-500 mt-1">Get free from <a href="https://aistudio.google.com" target="_blank" class="text-indigo-400">aistudio.google.com</a></p>
         </div>
         <div>
-            <label class="text-[10px] font-bold text-slate-400">📊 ALPHA VANTAGE API KEY (Optional)</label>
-            <input type="password" id="alphaKey" class="input-dark text-sm mt-1" placeholder="Paste your Alpha Vantage key">
-            <p class="text-[8px] text-slate-500 mt-1">Get free from <a href="https://alphavantage.co/support/#api-key" target="_blank" class="text-indigo-400">alphavantage.co</a></p>
+            <label class="text-[10px] font-bold text-slate-400">📡 TWELVE DATA API KEY (required for real‑time Gold/Silver)</label>
+            <input type="password" id="twelveDataKey" class="input-dark text-sm mt-1" placeholder="Paste your Twelve Data API key">
+            <p class="text-[8px] text-slate-500 mt-1">Get free from <a href="https://twelvedata.com" target="_blank" class="text-indigo-400">twelvedata.com</a> – also used for all market data</p>
+        </div>
+        <div>
+            <label class="text-[10px] font-bold text-slate-400">📊 ALPHA VANTAGE KEY (optional – not used now)</label>
+            <input type="password" id="alphaKey" class="input-dark text-sm mt-1" placeholder="Not needed, kept for compatibility">
         </div>
         <div class="grid grid-cols-2 gap-3">
             <div><label class="text-[10px] font-bold text-slate-400">💰 BALANCE ($)</label><input type="number" id="balance" class="input-dark mt-1" value="10000"></div>
@@ -89,13 +90,13 @@
             <label class="text-[10px] font-bold text-slate-400">🎯 TRADING MODE</label>
             <select id="modeSelect" class="input-dark mt-1">
                 <option value="scalp">⚡ SCALPING (1:1.5 - 1:4 RR)</option>
-                <option value="day">📊 DAY TRADING (1:4 - 1:10 RR)</option>
+                <option value="day">📊 DAY TRADING (1:4 - 1:12 RR)</option>
             </select>
         </div>
         <div>
             <label class="text-[10px] font-bold text-slate-400">🤖 AUTO PRICE TRACKING</label>
             <select id="autoTrackSelect" class="input-dark mt-1">
-                <option value="on">✅ ON - Auto detect TP/SL hits</option>
+                <option value="on">✅ ON - Auto detect TP/SL hits (uses cached data, no extra API calls)</option>
                 <option value="off">⏸️ OFF - Manual feedback only</option>
             </select>
         </div>
@@ -106,7 +107,6 @@
 <div id="drawerOverlay" class="fixed inset-0 bg-black/70 z-40 hidden" onclick="closeDrawer()"></div>
 
 <div class="max-w-md mx-auto">
-    <!-- Header -->
     <div class="flex justify-between items-center mb-6">
         <div>
             <h1 class="text-2xl font-black">OMNI—SIGNAL</h1>
@@ -118,14 +118,14 @@
         </div>
     </div>
 
-    <!-- Symbol Selector - Full XM Watchlist -->
+    <!-- Symbol Selector -->
     <div class="card">
         <label class="text-[10px] font-bold text-slate-400">📈 SYMBOL</label>
         <div class="flex gap-2 mt-2">
             <select id="symbolSelect" class="input-dark flex-1">
-                <optgroup label="Commodities">
-                    <option value="XAUUSD">🪙 GOLD (XAUUSD)</option>
-                    <option value="XAGUSD">🥈 SILVER (XAGUSD)</option>
+                <optgroup label="Commodities (Real‑time via WebSocket)">
+                    <option value="XAUUSD">🪙 GOLD (XAUUSD) – Real‑time</option>
+                    <option value="XAGUSD">🥈 SILVER (XAGUSD) – Real‑time</option>
                     <option value="OILCash">🛢️ WTI OIL (OILCash)</option>
                 </optgroup>
                 <optgroup label="Forex">
@@ -163,7 +163,7 @@
         <div class="grid grid-cols-2 gap-3">
             <div class="text-center p-2 bg-black/30 rounded-xl"><p class="text-[8px] text-slate-500">ENTRY</p><p id="entryPrice" class="text-lg font-bold">--</p></div>
             <div class="text-center p-2 bg-black/30 rounded-xl"><p class="text-[8px] text-slate-500">STOP LOSS</p><p id="stopLoss" class="text-lg font-bold text-rose-400">--</p></div>
-            <div class="text-center p-2 bg-black/30 rounded-xl"><p class="text-[8px] text-slate-500">TAKE PROFIT</p><p id="takeProfit" class="text-lg font-bold text-emerald-400">--</p></div>
+            <div class="text-center p-2 bg-black/30 rounded-xl"><p class="text-[8px] text-slate-500">TAKE PROFIT (TP1 / TP2)</p><p id="takeProfit" class="text-lg font-bold text-emerald-400">--</p></div>
             <div class="text-center p-2 bg-black/30 rounded-xl"><p class="text-[8px] text-slate-500">LOT SIZE</p><p id="lotSize" class="text-lg font-bold text-cyan-400">--</p></div>
         </div>
     </div>
