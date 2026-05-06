@@ -32,201 +32,202 @@
             --text-secondary: #4a5568;
         }
         
-        body { background: var(--bg-primary); color: var(--text-primary); font-family: 'Inter', sans-serif; overflow-x: hidden; transition: all 0.3s ease; }
+        body { background: var(--bg-primary); color: var(--text-primary); font-family: 'Inter', sans-serif; overflow-x: hidden; transition: all 0.3s ease; padding: 20px; }
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: var(--bg-secondary); }
         ::-webkit-scrollbar-thumb { background: var(--accent-primary); border-radius: 10px; }
         .glass { background: rgba(15, 21, 34, 0.7); backdrop-filter: blur(12px); border: 1px solid var(--border-subtle); }
         [data-theme="light"] .glass { background: rgba(255, 255, 255, 0.7); }
-        .glass-card { background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 2rem; }
-        .mode-toggle { position: relative; background: var(--bg-secondary); border-radius: 3rem; padding: 4px; }
-        .mode-option { padding: 0.75rem 2rem; border-radius: 2.5rem; font-weight: 800; font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; transition: all 0.3s ease; color: var(--text-secondary); }
-        .mode-option.active { background: linear-gradient(135deg, var(--accent-primary), #4338ca); color: white; box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3); }
-        .signal-buy { color: var(--accent-buy); text-shadow: 0 0 20px rgba(0,255,136,0.3); }
-        .signal-sell { color: var(--accent-sell); text-shadow: 0 0 20px rgba(255,68,102,0.3); }
-        .signal-wait { color: var(--accent-wait); text-shadow: 0 0 20px rgba(255,170,0,0.3); }
+        .card { background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 24px; padding: 20px; margin-bottom: 16px; }
+        .btn { background: linear-gradient(135deg, #6366f1, #4338ca); padding: 14px; border-radius: 16px; font-weight: bold; width: 100%; border: none; color: white; cursor: pointer; transition: opacity 0.2s; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-secondary { background: #1e293b; }
+        .signal-buy { color: #00ff88; text-shadow: 0 0 20px rgba(0,255,136,0.3); }
+        .signal-sell { color: #ff4466; text-shadow: 0 0 20px rgba(255,68,102,0.3); }
+        .signal-wait { color: #ffaa00; text-shadow: 0 0 20px rgba(255,170,0,0.3); }
+        .input-dark { background: var(--bg-secondary); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 12px; color: var(--text-primary); width: 100%; outline: none; }
+        .input-dark:focus { border-color: var(--accent-primary); }
+        .badge { background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.2); border-radius: 12px; padding: 6px 12px; font-size: 11px; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-        .loading-pulse { animation: pulse 1.5s ease-in-out infinite; }
-        @keyframes slideIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        .slide-in { animation: slideIn 0.3s ease-out; }
-        #loadingOverlay { position: fixed; inset: 0; background: rgba(5, 8, 15, 0.95); backdrop-filter: blur(8px); z-index: 1000; display: none; justify-content: center; align-items: center; flex-direction: column; }
-        .input-dark { background: var(--bg-secondary); border: 1px solid var(--border-subtle); border-radius: 1rem; padding: 0.75rem 1rem; color: var(--text-primary); outline: none; transition: all 0.2s; }
-        .input-dark:focus { border-color: var(--accent-primary); box-shadow: 0 0 10px rgba(99,102,241,0.2); }
-        .metric-badge { background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.2); border-radius: 1rem; padding: 0.5rem 0.75rem; font-size: 0.7rem; font-weight: 600; }
-        .xm-symbol-card { background: var(--bg-secondary); border: 1px solid var(--border-subtle); border-radius: 1rem; padding: 0.75rem; cursor: pointer; transition: all 0.2s; }
-        .xm-symbol-card:hover { border-color: var(--accent-primary); transform: translateY(-2px); }
-        .xm-symbol-card.active { border-color: var(--accent-primary); background: rgba(99,102,241,0.1); }
-        .multi-chart-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 0.75rem; margin-top: 1rem; }
-        .backtest-item { background: var(--bg-secondary); border-radius: 1rem; padding: 0.75rem; margin-bottom: 0.5rem; font-size: 0.75rem; }
-        .theme-toggle { width: 40px; height: 40px; border-radius: 20px; background: var(--bg-card); border: 1px solid var(--border-subtle); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.3s; }
-        .toast { position: fixed; bottom: 20px; right: 20px; background: var(--accent-primary); color: white; padding: 12px 20px; border-radius: 12px; font-size: 12px; font-weight: bold; z-index: 1100; animation: slideIn 0.3s ease-out; }
-        .remove-symbol { opacity: 0.6; transition: opacity 0.2s; }
-        .remove-symbol:hover { opacity: 1; }
-        .info-text { font-size: 9px; color: #64748b; margin-top: 4px; }
+        .loading { animation: pulse 1.5s ease-in-out infinite; }
+        .overlay { position: fixed; inset: 0; background: rgba(5,8,15,0.95); backdrop-filter: blur(8px); z-index: 1000; display: none; justify-content: center; align-items: center; flex-direction: column; }
+        .drawer { position: fixed; top: 0; right: -100%; width: 320px; height: 100%; background: #0a0f1a; transition: 0.3s; z-index: 1001; border-left: 1px solid rgba(255,255,255,0.1); padding: 24px; overflow-y: auto; }
+        .drawer.open { right: 0; }
+        .toast { position: fixed; bottom: 20px; right: 20px; padding: 12px 20px; border-radius: 12px; font-size: 12px; z-index: 1100; color: white; }
+        .toast-success { background: #10b981; }
+        .toast-error { background: #ef4444; }
+        .toast-info { background: #6366f1; }
+        .toast-warning { background: #f59e0b; }
+        .theme-toggle { width: 40px; height: 40px; border-radius: 20px; background: var(--bg-card); border: 1px solid var(--border-subtle); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .auto-track-badge { background: rgba(16,185,129,0.2); border: 1px solid rgba(16,185,129,0.3); border-radius: 20px; padding: 4px 10px; font-size: 9px; color: #10b981; display: inline-flex; align-items: center; gap: 4px; }
     </style>
 </head>
-<body class="p-4 md:p-8">
+<body>
 
-    <div id="loadingOverlay">
-        <div class="text-center">
-            <i class="fa-solid fa-microchip fa-4x text-indigo-500 mb-4"></i>
-            <p class="text-indigo-400 font-bold tracking-wider loading-pulse">COUNCIL OF 15 ANALYZING...</p>
-            <p class="text-xs text-slate-500 mt-2">Selecting best strategy for current market</p>
+<div id="loadingOverlay" class="overlay">
+    <i class="fa-solid fa-microchip fa-4x text-indigo-500 mb-4"></i>
+    <p class="text-indigo-400 font-bold loading">ANALYZING MARKET...</p>
+</div>
+
+<div id="settingsDrawer" class="drawer">
+    <div class="flex justify-between items-center mb-6">
+        <h3 class="text-lg font-black">⚙️ SETTINGS</h3>
+        <button id="closeSettings" class="text-slate-400 text-xl">&times;</button>
+    </div>
+    <div class="space-y-4">
+        <div>
+            <label class="text-[10px] font-bold text-slate-400">🔑 GEMINI API KEY</label>
+            <input type="password" id="apiKey" class="input-dark text-sm mt-1" placeholder="Paste your Gemini API key">
+            <p class="text-[8px] text-slate-500 mt-1">Get free from <a href="https://aistudio.google.com" target="_blank" class="text-indigo-400">aistudio.google.com</a></p>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+            <div><label class="text-[10px] font-bold text-slate-400">💰 BALANCE ($)</label><input type="number" id="balance" class="input-dark mt-1" value="10000"></div>
+            <div><label class="text-[10px] font-bold text-slate-400">⚠️ RISK %</label><input type="number" id="riskPercent" class="input-dark mt-1" value="1.0" step="0.1"></div>
+        </div>
+        <div>
+            <label class="text-[10px] font-bold text-slate-400">🎯 TRADING MODE</label>
+            <select id="modeSelect" class="input-dark mt-1">
+                <option value="scalp">⚡ SCALPING (1:1.5 - 1:4 RR)</option>
+                <option value="day">📊 DAY TRADING (1:4 - 1:10 RR)</option>
+            </select>
+        </div>
+        <div>
+            <label class="text-[10px] font-bold text-slate-400">🤖 AUTO PRICE TRACKING</label>
+            <select id="autoTrackSelect" class="input-dark mt-1">
+                <option value="on">✅ ON - Auto detect TP/SL hits</option>
+                <option value="off">⏸️ OFF - Manual feedback only</option>
+            </select>
+            <p class="text-[8px] text-slate-500 mt-1">Automatically checks price every 30 seconds</p>
+        </div>
+        <button id="saveSettings" class="btn text-sm py-3">SAVE & SECURE</button>
+    </div>
+</div>
+
+<div id="drawerOverlay" class="fixed inset-0 bg-black/70 z-40 hidden" onclick="closeDrawer()"></div>
+
+<div class="max-w-md mx-auto">
+    
+    <!-- Header -->
+    <div class="flex justify-between items-center mb-6">
+        <div>
+            <h1 class="text-2xl font-black">OMNI—SIGNAL</h1>
+            <p class="text-[8px] text-indigo-400 tracking-wider">XM EDITION | AUTO TRACKING</p>
+        </div>
+        <div class="flex gap-2">
+            <button id="themeToggle" class="theme-toggle"><i class="fa-solid fa-moon"></i></button>
+            <button id="settingsBtn" class="w-10 h-10 bg-white/5 rounded-xl"><i class="fa-solid fa-sliders-h"></i></button>
         </div>
     </div>
 
-    <div class="max-w-7xl mx-auto">
-        
-        <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-            <div>
-                <h1 class="text-4xl md:text-5xl font-black italic tracking-tighter bg-gradient-to-r from-indigo-400 via-cyan-400 to-indigo-400 bg-clip-text text-transparent">
-                    OMNI—SUPREME
-                </h1>
-                <p class="text-[8px] font-black text-indigo-400/60 uppercase tracking-[0.3em] mt-2">
-                    XM EDITION | 15 STRATEGIES | MULTI-API BACKUP
-                </p>
-            </div>
-            <div class="flex gap-3">
-                <button id="themeToggle" class="theme-toggle"><i class="fa-solid fa-moon text-slate-400 text-xl"></i></button>
-                <button id="settingsBtn" class="w-12 h-12 glass rounded-2xl flex items-center justify-center hover:bg-white/5 transition-all"><i class="fa-solid fa-sliders-h text-slate-400 text-xl"></i></button>
-            </div>
-        </header>
-
-        <div class="mb-8">
-            <div class="mode-toggle flex w-full max-w-xs mx-auto md:mx-0">
-                <div id="modeScalp" class="mode-option flex-1 text-center active">⚡ SCALPING</div>
-                <div id="modeDay" class="mode-option flex-1 text-center">📊 DAY TRADING</div>
-            </div>
-            <p id="modeDescription" class="text-center text-xs text-slate-500 mt-3">Aggressive setups | 1:1.5 to 1:4 RR | Lower-Medium Risk</p>
+    <!-- Symbol Selector -->
+    <div class="card">
+        <label class="text-[10px] font-bold text-slate-400">📈 SYMBOL</label>
+        <div class="flex gap-2 mt-2">
+            <select id="symbolSelect" class="input-dark flex-1">
+                <option value="XAUUSD">🪙 GOLD (XAUUSD)</option>
+                <option value="EURUSD">💶 EUR/USD</option>
+                <option value="GBPUSD">💷 GBP/USD</option>
+                <option value="BTCUSD">₿ BTC/USD</option>
+                <option value="ETHUSD">Ξ ETH/USD</option>
+            </select>
+            <button id="analyzeBtn" class="bg-indigo-600 px-4 rounded-xl font-bold text-sm">GO</button>
         </div>
-
-        <div class="glass-card p-5 mb-8">
-            <div class="flex justify-between items-center mb-4">
-                <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider">📊 XM WATCHLIST</label>
-                <button id="addXmSymbolBtn" class="text-[10px] text-indigo-400 hover:text-indigo-300">+ Add XM Symbol</button>
-            </div>
-            <div id="xmWatchlistContainer" class="multi-chart-grid"></div>
-        </div>
-
-        <div class="mb-4 flex justify-between items-center">
-            <div><span class="text-[9px] text-slate-500 uppercase tracking-wider">Currently Analyzing</span><h3 id="currentSymbolDisplay" class="text-2xl font-black font-mono text-indigo-400">GOLD</h3></div>
-            <button id="soundToggle" class="metric-badge"><i class="fa-solid fa-volume-up mr-1"></i> Sound ON</button>
-        </div>
-
-        <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-8">
-            <div class="glass-card p-4 text-center"><p class="text-[9px] text-slate-500 uppercase font-black tracking-wider">Current</p><p id="currentPrice" class="text-xl font-bold font-mono">--</p></div>
-            <div class="glass-card p-4 text-center"><p class="text-[9px] text-slate-500 uppercase font-black tracking-wider">RSI (14)</p><p id="rsiValue" class="text-xl font-bold font-mono">--</p></div>
-            <div class="glass-card p-4 text-center"><p class="text-[9px] text-slate-500 uppercase font-black tracking-wider">ATR (14)</p><p id="atrValue" class="text-xl font-bold font-mono">--</p></div>
-            <div class="glass-card p-4 text-center"><p class="text-[9px] text-slate-500 uppercase font-black tracking-wider">24H High</p><p id="highValue" class="text-xl font-bold font-mono text-emerald-400">--</p></div>
-            <div class="glass-card p-4 text-center"><p class="text-[9px] text-slate-500 uppercase font-black tracking-wider">24H Low</p><p id="lowValue" class="text-xl font-bold font-mono text-rose-400">--</p></div>
-        </div>
-
-        <div class="glass-card p-6 md:p-8 mb-8">
-            <div class="flex justify-between items-start mb-6 flex-wrap gap-3">
-                <div><p class="text-[9px] text-slate-500 uppercase font-black tracking-wider">TRADE BIAS</p><h2 id="signalBias" class="text-6xl md:text-7xl font-black italic tracking-tighter signal-wait">--</h2></div>
-                <div class="text-right"><p class="text-[9px] text-slate-500 uppercase font-black tracking-wider">CONFIDENCE</p><p id="confidenceScore" class="text-3xl font-black text-indigo-400">--</p></div>
-            </div>
-            
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                <div class="bg-black/30 rounded-2xl p-4 text-center"><p class="text-[8px] text-slate-500 uppercase font-black tracking-wider">ENTRY</p><p id="entryPrice" class="text-2xl font-black font-mono">--</p></div>
-                <div class="bg-black/30 rounded-2xl p-4 text-center"><p class="text-[8px] text-slate-500 uppercase font-black tracking-wider">STOP LOSS</p><p id="stopLoss" class="text-2xl font-black font-mono text-rose-400">--</p></div>
-                <div class="bg-black/30 rounded-2xl p-4 text-center"><p class="text-[8px] text-slate-500 uppercase font-black tracking-wider">TAKE PROFIT</p><p id="takeProfit" class="text-2xl font-black font-mono text-emerald-400">--</p></div>
-                <div class="bg-black/30 rounded-2xl p-4 text-center"><p class="text-[8px] text-slate-500 uppercase font-black tracking-wider">LOT SIZE (XM)</p><p id="lotSize" class="text-2xl font-black font-mono text-cyan-400">--</p></div>
-            </div>
-            
-            <div class="flex justify-between items-center flex-wrap gap-3 mb-6 p-4 bg-black/20 rounded-2xl">
-                <div class="flex gap-4">
-                    <div class="metric-badge">📐 RR: <span id="rrRatio" class="font-bold text-emerald-400">0:0</span></div>
-                    <div class="metric-badge">🎯 Trade Type: <span id="tradeType" class="font-bold text-cyan-400">--</span></div>
-                    <div class="metric-badge">📈 Asset: <span id="assetClass" class="font-bold">--</span></div>
-                </div>
-                <div class="metric-badge">Strategy: <span id="activeStrategy" class="font-bold">Council of 15</span></div>
-            </div>
-            
-            <div class="bg-indigo-500/5 border border-indigo-500/10 rounded-2xl p-5 mb-4">
-                <p class="text-[9px] text-indigo-400 uppercase font-black tracking-wider mb-2">⚡ SURGICAL LOGIC</p>
-                <p id="logicText" class="text-sm leading-relaxed">Click Analyze to start</p>
-            </div>
-            
-            <div id="poiContainer" class="hidden bg-amber-500/5 border border-amber-500/20 rounded-2xl p-5">
-                <p class="text-[9px] text-amber-500 uppercase font-black tracking-wider mb-2">📍 POINT OF INTEREST (POI)</p>
-                <p id="poiLevel" class="text-2xl font-black font-mono text-amber-400 mb-2">--</p>
-                <p id="poiLogic" class="text-xs text-slate-400">Await price reaching this level before re-scanning</p>
-            </div>
-            
-            <p class="text-[9px] text-slate-600 text-center mt-6">⚠️ EDUCATIONAL ONLY | Signals for XM platform | You execute trades</p>
-        </div>
-
-        <button id="analyzeBtn" class="w-full py-5 rounded-2xl font-black text-sm uppercase tracking-wider transition-all" style="background: linear-gradient(135deg, #6366f1, #4338ca); box-shadow: 0 4px 20px rgba(99,102,241,0.3);">
-            <i class="fa-solid fa-brain mr-2"></i> EXECUTE SURGICAL SCAN
-        </button>
-
-        <div class="glass-card p-6 mt-8">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-sm font-black uppercase tracking-wider">📜 BACKTEST HISTORY</h3>
-                <button id="clearHistoryBtn" class="text-[9px] text-slate-500 hover:text-rose-400">Clear All</button>
-            </div>
-            <div id="historyList" class="max-h-48 overflow-y-auto"><p class="text-center text-slate-500 text-xs py-4">No signals recorded yet</p></div>
-        </div>
-
-        <div id="settingsDrawer" class="fixed top-0 right-0 h-full w-full max-w-md bg-[#0a0f1a] z-50 transform translate-x-full transition-transform duration-300 shadow-2xl overflow-y-auto">
-            <div class="p-8">
-                <div class="flex justify-between items-center mb-8">
-                    <h3 class="text-xl font-black italic">⚙️ CONFIGURATION</h3>
-                    <button id="closeSettings" class="w-10 h-10 glass rounded-xl">✕</button>
-                </div>
-                
-                <div class="space-y-6">
-                    <div>
-                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">🔑 GEMINI API KEY (Required)</label>
-                        <input type="password" id="apiKey" class="input-dark w-full font-mono text-sm" placeholder="Enter your Gemini API key">
-                        <p class="info-text">Get from <a href="https://aistudio.google.com" target="_blank" class="text-indigo-400">aistudio.google.com</a> | Free tier: 1500 requests/day</p>
-                    </div>
-                    
-                    <div>
-                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">📊 ALPHA VANTAGE API KEY (Optional - Better Data)</label>
-                        <input type="password" id="alphaKey" class="input-dark w-full font-mono text-sm" placeholder="Enter your Alpha Vantage API key">
-                        <p class="info-text">Get FREE from <a href="https://www.alphavantage.co/support/#api-key" target="_blank" class="text-indigo-400">alphavantage.co/support/#api-key</a> | 1-2 min delay</p>
-                    </div>
-                    
-                    <div class="grid grid-cols-2 gap-4">
-                        <div><label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">💰 XM BALANCE ($)</label><input type="number" id="balance" class="input-dark w-full" placeholder="10000" value="10000"></div>
-                        <div><label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">⚠️ RISK %</label><input type="number" id="riskPercent" class="input-dark w-full" placeholder="1.0" value="1.0" step="0.1"></div>
-                    </div>
-                    
-                    <div>
-                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">🤖 AI MODEL</label>
-                        <select id="modelSelect" class="input-dark w-full">
-                            <option value="gemini-2.5-flash-lite">🚀 Gemini 2.5 Flash Lite (Faster)</option>
-                            <option value="gemini-2.5-flash">🎯 Gemini 2.5 Flash (Premium)</option>
-                            <option value="both">🔄 Both (Auto-failover)</option>
-                        </select>
-                    </div>
-                    
-                    <div>
-                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">📱 TELEGRAM ALERTS (Optional)</label>
-                        <input type="text" id="telegramBotToken" class="input-dark w-full mb-2" placeholder="Bot Token">
-                        <input type="text" id="telegramChatId" class="input-dark w-full" placeholder="Chat ID">
-                        <button id="testTelegramBtn" class="mt-3 text-[10px] text-indigo-400 hover:text-indigo-300">Test Connection</button>
-                    </div>
-                    
-                    <div class="bg-indigo-500/10 rounded-xl p-3">
-                        <p class="text-[8px] text-slate-400 text-center">📡 Multi-API Backup: Alpha Vantage → Twelve Data → Binance → Yahoo</p>
-                    </div>
-                    
-                    <button id="saveSettings" class="w-full py-4 bg-indigo-600 rounded-xl font-black text-sm uppercase tracking-wider hover:bg-indigo-700 transition-all">SAVE & SECURE</button>
-                </div>
-            </div>
-        </div>
-        
-        <div id="drawerOverlay" class="fixed inset-0 bg-black/70 z-40 hidden"></div>
     </div>
 
-    <audio id="alertSound" preload="auto"><source src="https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3" type="audio/mpeg"></audio>
+    <!-- Current Price with Auto-Track Status -->
+    <div class="card text-center">
+        <div class="flex justify-between items-center mb-2">
+            <p class="text-[10px] text-slate-500">CURRENT PRICE</p>
+            <span id="autoTrackStatus" class="auto-track-badge"><i class="fa-solid fa-satellite-dish"></i> Auto-Tracking ON</span>
+        </div>
+        <p id="currentPrice" class="text-3xl font-bold font-mono">--</p>
+        <p id="updateTime" class="text-[8px] text-slate-600 mt-1">Waiting for data...</p>
+    </div>
 
-    <script src="market-data.js"></script>
-    <script src="strategy-engine.js"></script>
-    <script src="risk-manager.js"></script>
-    <script src="app.js"></script>
+    <!-- SIGNAL - BIG AND CLEAR -->
+    <div class="card text-center">
+        <p class="text-[10px] text-slate-500">TRADE SIGNAL</p>
+        <h1 id="signalBias" class="text-7xl font-black italic signal-wait">WAIT</h1>
+        <p id="confidenceText" class="text-sm text-indigo-400 mt-1">--% confidence</p>
+    </div>
+
+    <!-- Trade Levels -->
+    <div class="card">
+        <div class="grid grid-cols-2 gap-3">
+            <div class="text-center p-2 bg-black/30 rounded-xl">
+                <p class="text-[8px] text-slate-500">ENTRY</p>
+                <p id="entryPrice" class="text-lg font-bold">--</p>
+            </div>
+            <div class="text-center p-2 bg-black/30 rounded-xl">
+                <p class="text-[8px] text-slate-500">STOP LOSS</p>
+                <p id="stopLoss" class="text-lg font-bold text-rose-400">--</p>
+            </div>
+            <div class="text-center p-2 bg-black/30 rounded-xl">
+                <p class="text-[8px] text-slate-500">TAKE PROFIT</p>
+                <p id="takeProfit" class="text-lg font-bold text-emerald-400">--</p>
+            </div>
+            <div class="text-center p-2 bg-black/30 rounded-xl">
+                <p class="text-[8px] text-slate-500">LOT SIZE</p>
+                <p id="lotSize" class="text-lg font-bold text-cyan-400">--</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Bar -->
+    <div class="flex justify-between gap-2 mb-4">
+        <div class="badge">📐 RR: <span id="rrValue">0:0</span></div>
+        <div class="badge">🎯 <span id="tradeType">--</span></div>
+        <div class="badge">🏆 WR: <span id="winRateDisplay">0%</span></div>
+    </div>
+
+    <!-- Logic Explanation -->
+    <div class="card bg-indigo-500/5 border-indigo-500/10">
+        <p class="text-[9px] text-indigo-400 font-bold">⚡ SIGNAL LOGIC</p>
+        <p id="logicText" class="text-xs mt-2 leading-relaxed">Click GO to analyze</p>
+    </div>
+
+    <!-- POI for WAIT signals -->
+    <div id="poiBox" class="card hidden bg-amber-500/5 border-amber-500/20">
+        <p class="text-[9px] text-amber-500 font-bold">📍 POINT OF INTEREST</p>
+        <p id="poiLevel" class="text-lg font-bold text-amber-400">--</p>
+        <p id="poiLogic" class="text-[10px] text-slate-400 mt-1">Wait for price to reach this level</p>
+    </div>
+
+    <!-- Open Trades Section (for feedback) -->
+    <div class="card mt-4">
+        <div class="flex justify-between items-center mb-3">
+            <h3 class="text-sm font-black">📝 OPEN TRADES</h3>
+            <span class="text-[8px] text-slate-500">Auto-tracking active</span>
+        </div>
+        <div id="openTradesContainer">
+            <p class="text-center text-slate-500 text-xs py-4">No open trades. Run analysis and trade will appear here.</p>
+        </div>
+    </div>
+
+    <!-- Strategy Performance Section -->
+    <div class="card mt-4">
+        <h3 class="text-sm font-black mb-3">📊 STRATEGY PERFORMANCE</h3>
+        <div id="strategyPerformanceContainer">
+            <p class="text-center text-slate-500 text-xs py-4">Loading performance data...</p>
+        </div>
+    </div>
+
+    <!-- Feedback History Section -->
+    <div class="card mt-4">
+        <div class="flex justify-between items-center mb-3">
+            <h3 class="text-sm font-black">📜 FEEDBACK HISTORY</h3>
+            <button id="clearFeedbackBtn" class="text-[8px] text-slate-500 hover:text-rose-400">Clear</button>
+        </div>
+        <div id="feedbackHistoryContainer">
+            <p class="text-center text-slate-500 text-xs py-4">No feedback recorded yet.</p>
+        </div>
+    </div>
+
+    <!-- Disclaimer -->
+    <p class="text-[8px] text-slate-600 text-center mt-4">⚠️ Educational only. You execute trades on XM.</p>
+</div>
+
+<script src="app.js"></script>
+<script src="feedback.js"></script>
 </body>
 </html>
