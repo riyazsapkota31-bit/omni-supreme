@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>OMNI—SUPREME | V1.0</title>
+    <title>OMNI—SUPREME | V2.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         
+        /* Light/Dark Theme Variables */
         :root {
             --bg-primary: #05080f;
             --bg-secondary: #0a0f1a;
@@ -19,13 +20,25 @@
             --accent-wait: #ffaa00;
             --accent-primary: #6366f1;
             --border-subtle: rgba(255,255,255,0.06);
+            --text-primary: #e8edf5;
+            --text-secondary: #8a99b0;
+        }
+        
+        [data-theme="light"] {
+            --bg-primary: #f0f4f8;
+            --bg-secondary: #ffffff;
+            --bg-card: #ffffff;
+            --border-subtle: rgba(0,0,0,0.1);
+            --text-primary: #1a202c;
+            --text-secondary: #4a5568;
         }
         
         body {
             background: var(--bg-primary);
-            color: #e8edf5;
+            color: var(--text-primary);
             font-family: 'Inter', sans-serif;
             overflow-x: hidden;
+            transition: all 0.3s ease;
         }
         
         ::-webkit-scrollbar { width: 6px; }
@@ -36,6 +49,11 @@
             background: rgba(15, 21, 34, 0.7);
             backdrop-filter: blur(12px);
             border: 1px solid var(--border-subtle);
+        }
+        
+        [data-theme="light"] .glass {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(12px);
         }
         
         .glass-card {
@@ -60,7 +78,7 @@
             text-transform: uppercase;
             cursor: pointer;
             transition: all 0.3s ease;
-            color: #4a5568;
+            color: var(--text-secondary);
         }
         
         .mode-option.active {
@@ -79,16 +97,11 @@
         }
         .loading-pulse { animation: pulse 1.5s ease-in-out infinite; }
         
-        .value-large {
-            font-size: 2.5rem;
-            font-weight: 800;
-            letter-spacing: -0.02em;
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
         }
-        
-        @media (max-width: 640px) {
-            .value-large { font-size: 1.75rem; }
-            .glass-card { padding: 1rem; }
-        }
+        .slide-in { animation: slideIn 0.3s ease-out; }
         
         #loadingOverlay {
             position: fixed;
@@ -107,7 +120,7 @@
             border: 1px solid var(--border-subtle);
             border-radius: 1rem;
             padding: 0.75rem 1rem;
-            color: white;
+            color: var(--text-primary);
             outline: none;
             transition: all 0.2s;
         }
@@ -125,6 +138,71 @@
             font-size: 0.7rem;
             font-weight: 600;
         }
+        
+        /* Multi-Chart View */
+        .multi-chart-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        
+        .chart-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 1.5rem;
+            padding: 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .chart-card:hover {
+            transform: translateY(-2px);
+            border-color: var(--accent-primary);
+        }
+        
+        .chart-card.active {
+            border-color: var(--accent-primary);
+            background: rgba(99,102,241,0.05);
+        }
+        
+        /* Backtest Panel */
+        .backtest-item {
+            background: var(--bg-secondary);
+            border-radius: 1rem;
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            font-size: 0.75rem;
+        }
+        
+        /* Theme Toggle Button */
+        .theme-toggle {
+            width: 40px;
+            height: 40px;
+            border-radius: 20px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+        }
+        
+        /* Toast Notification */
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: var(--accent-primary);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+            z-index: 1100;
+            animation: slideIn 0.3s ease-out;
+        }
     </style>
 </head>
 <body class="p-4 md:p-8">
@@ -139,7 +217,7 @@
     </div>
 
     <!-- Main Container -->
-    <div class="max-w-6xl mx-auto">
+    <div class="max-w-7xl mx-auto">
         
         <!-- Header -->
         <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
@@ -148,12 +226,17 @@
                     OMNI—SUPREME
                 </h1>
                 <p class="text-[8px] font-black text-indigo-400/60 uppercase tracking-[0.3em] mt-2">
-                    8-CORE AGGREGATOR | V1.0 | GEMINI 2.5 FLASH
+                    8-CORE AGGREGATOR | V2.0 | GEMINI 2.5 FLASH
                 </p>
             </div>
-            <button id="settingsBtn" class="w-12 h-12 glass rounded-2xl flex items-center justify-center hover:bg-white/5 transition-all">
-                <i class="fa-solid fa-sliders-h text-slate-400 text-xl"></i>
-            </button>
+            <div class="flex gap-3">
+                <button id="themeToggle" class="theme-toggle">
+                    <i class="fa-solid fa-moon text-slate-400 text-xl"></i>
+                </button>
+                <button id="settingsBtn" class="w-12 h-12 glass rounded-2xl flex items-center justify-center hover:bg-white/5 transition-all">
+                    <i class="fa-solid fa-sliders-h text-slate-400 text-xl"></i>
+                </button>
+            </div>
         </header>
 
         <!-- Mode Selection -->
@@ -167,18 +250,55 @@
             </p>
         </div>
 
-        <!-- Symbol Input & Quick Select -->
+        <!-- Multi-Chart Symbol Selector -->
         <div class="glass-card p-5 mb-8">
-            <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2 block">TRADING SYMBOL</label>
-            <div class="flex flex-col md:flex-row gap-3">
-                <input type="text" id="symbolInput" value="XAUUSD" class="input-dark flex-1 text-lg font-mono">
-                <div class="flex gap-2 flex-wrap">
-                    <button data-sym="XAUUSD" class="quick-sym px-4 py-2 glass rounded-xl text-xs font-bold hover:bg-indigo-500/20 transition-all">🪙 XAUUSD</button>
-                    <button data-sym="EURUSD" class="quick-sym px-4 py-2 glass rounded-xl text-xs font-bold hover:bg-indigo-500/20 transition-all">💶 EURUSD</button>
-                    <button data-sym="GBPUSD" class="quick-sym px-4 py-2 glass rounded-xl text-xs font-bold hover:bg-indigo-500/20 transition-all">💷 GBPUSD</button>
-                    <button data-sym="BTCUSD" class="quick-sym px-4 py-2 glass rounded-xl text-xs font-bold hover:bg-indigo-500/20 transition-all">₿ BTCUSD</button>
+            <div class="flex justify-between items-center mb-4">
+                <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider">📊 MULTI-CHART VIEW</label>
+                <button id="addSymbolBtn" class="text-[10px] text-indigo-400 hover:text-indigo-300">+ Add Symbol</button>
+            </div>
+            <div id="multiChartContainer" class="multi-chart-grid">
+                <div class="chart-card active" data-symbol="XAUUSD" data-index="0">
+                    <div class="flex justify-between items-center">
+                        <span class="font-bold font-mono">🪙 XAUUSD</span>
+                        <span class="text-[8px] text-slate-500">Active</span>
+                    </div>
+                    <div class="mt-2">
+                        <p class="text-[10px] text-slate-400">Price: <span id="price0">--</span></p>
+                        <p class="text-[8px] text-slate-500">Click to analyze</p>
+                    </div>
+                </div>
+                <div class="chart-card" data-symbol="EURUSD" data-index="1">
+                    <div class="flex justify-between items-center">
+                        <span class="font-bold font-mono">💶 EURUSD</span>
+                        <span class="text-[8px] text-slate-500">Ready</span>
+                    </div>
+                    <div class="mt-2">
+                        <p class="text-[10px] text-slate-400">Price: <span id="price1">--</span></p>
+                        <p class="text-[8px] text-slate-500">Click to analyze</p>
+                    </div>
+                </div>
+                <div class="chart-card" data-symbol="BTCUSD" data-index="2">
+                    <div class="flex justify-between items-center">
+                        <span class="font-bold font-mono">₿ BTCUSD</span>
+                        <span class="text-[8px] text-slate-500">Ready</span>
+                    </div>
+                    <div class="mt-2">
+                        <p class="text-[10px] text-slate-400">Price: <span id="price2">--</span></p>
+                        <p class="text-[8px] text-slate-500">Click to analyze</p>
+                    </div>
                 </div>
             </div>
+        </div>
+
+        <!-- Current Selected Symbol Display -->
+        <div class="mb-4 flex justify-between items-center">
+            <div>
+                <span class="text-[9px] text-slate-500 uppercase tracking-wider">Currently Analyzing</span>
+                <h3 id="currentSymbolDisplay" class="text-2xl font-black font-mono text-indigo-400">XAUUSD</h3>
+            </div>
+            <button id="soundToggle" class="metric-badge">
+                <i class="fa-solid fa-volume-up mr-1"></i> Sound ON
+            </button>
         </div>
 
         <!-- Key Metrics Row -->
@@ -259,20 +379,31 @@
             <!-- Logic / Reasoning -->
             <div class="bg-indigo-500/5 border border-indigo-500/10 rounded-2xl p-5 mb-4">
                 <p class="text-[9px] text-indigo-400 uppercase font-black tracking-wider mb-2">⚡ SURGICAL LOGIC</p>
-                <p id="logicText" class="text-sm leading-relaxed text-slate-300">Waiting for market data...</p>
+                <p id="logicText" class="text-sm leading-relaxed">Waiting for market data...</p>
             </div>
             
-            <!-- POI Protocol (Shown only on WAIT) -->
+            <!-- POI Protocol -->
             <div id="poiContainer" class="hidden bg-amber-500/5 border border-amber-500/20 rounded-2xl p-5">
                 <p class="text-[9px] text-amber-500 uppercase font-black tracking-wider mb-2">📍 POINT OF INTEREST (POI)</p>
                 <p id="poiLevel" class="text-2xl font-black font-mono text-amber-400 mb-2">--</p>
-                <p id="poiLogic" class="text-xs text-slate-400">Await price reaching this level before re-scanning.</p>
+                <p id="poiLogic" class="text-xs">Await price reaching this level before re-scanning.</p>
             </div>
             
             <!-- Disclaimer -->
             <p class="text-[9px] text-slate-600 text-center mt-6">
                 ⚠️ EDUCATIONAL ONLY | Signals generated by 8-core AI analysis | You execute trades on XM
             </p>
+        </div>
+
+        <!-- Backtest History Panel -->
+        <div class="glass-card p-6 mb-8">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-sm font-black uppercase tracking-wider">📜 BACKTEST HISTORY</h3>
+                <button id="clearHistoryBtn" class="text-[9px] text-slate-500 hover:text-rose-400">Clear All</button>
+            </div>
+            <div id="historyList" class="max-h-48 overflow-y-auto">
+                <p class="text-center text-slate-500 text-xs py-4">No signals recorded yet. Run analysis to save history.</p>
+            </div>
         </div>
 
         <!-- Action Button -->
@@ -293,7 +424,7 @@
                     <div>
                         <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">🔑 GEMINI API KEY</label>
                         <input type="password" id="apiKey" class="input-dark w-full font-mono text-sm" placeholder="Enter your Gemini API key">
-                        <p class="text-[8px] text-slate-500 mt-1">Get from <a href="https://aistudio.google.com" target="_blank" class="text-indigo-400">aistudio.google.com</a> | Supports 2.5 Flash & 2.5 Flash Lite</p>
+                        <p class="text-[8px] text-slate-500 mt-1">Get from <a href="https://aistudio.google.com" target="_blank" class="text-indigo-400">aistudio.google.com</a></p>
                     </div>
                     
                     <div class="grid grid-cols-2 gap-4">
@@ -307,7 +438,6 @@
                         </div>
                     </div>
                     
-                    <!-- MODEL SELECTOR - FULLY ADDED HERE -->
                     <div>
                         <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">🤖 AI MODEL</label>
                         <select id="modelSelect" class="input-dark w-full">
@@ -315,16 +445,14 @@
                             <option value="gemini-2.5-flash">🎯 Gemini 2.5 Flash (Premium Quality)</option>
                             <option value="both">🔄 Both (Primary Lite + Fallback Flash)</option>
                         </select>
-                        <p class="text-[8px] text-slate-500 mt-1">Both models are 100% compatible with your API. "Both" provides automatic failover.</p>
                     </div>
                     
                     <div>
-                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">📊 TELEGRAM ALERTS</label>
-                        <div class="flex items-center gap-3">
-                            <input type="text" id="telegramBotToken" class="input-dark flex-1" placeholder="Bot Token (optional)">
-                            <input type="text" id="telegramChatId" class="input-dark flex-1" placeholder="Chat ID (optional)">
-                        </div>
-                        <p class="text-[8px] text-slate-500 mt-1">Leave empty to disable. Get from <a href="https://t.me/BotFather" target="_blank" class="text-indigo-400">@BotFather</a></p>
+                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">📱 TELEGRAM ALERTS</label>
+                        <input type="text" id="telegramBotToken" class="input-dark w-full mb-2" placeholder="Bot Token">
+                        <input type="text" id="telegramChatId" class="input-dark w-full" placeholder="Chat ID">
+                        <p class="text-[8px] text-slate-500 mt-1">Get from <a href="https://t.me/BotFather" target="_blank" class="text-indigo-400">@BotFather</a></p>
+                        <button id="testTelegramBtn" class="mt-3 text-[10px] text-indigo-400 hover:text-indigo-300">Test Telegram Connection</button>
                     </div>
                     
                     <button id="saveSettings" class="w-full py-4 bg-indigo-600 rounded-xl font-black text-sm uppercase tracking-wider hover:bg-indigo-700 transition-all">
@@ -337,6 +465,11 @@
         <!-- Overlay for drawer -->
         <div id="drawerOverlay" class="fixed inset-0 bg-black/70 z-40 hidden"></div>
     </div>
+
+    <!-- Audio for Sound Alerts -->
+    <audio id="alertSound" preload="auto">
+        <source src="https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3" type="audio/mpeg">
+    </audio>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="market-data.js"></script>
