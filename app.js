@@ -1,5 +1,5 @@
 /**
- * OMNI-SIGNAL - Main Application (credit‑efficient, supports all assets)
+ * OMNI-SIGNAL - Main Application (credit‑efficient auto tracking)
  */
 
 const elements = {
@@ -146,7 +146,6 @@ function calculateLotSize(entry, sl, balance, riskPercent) {
     return Math.max(0.01, Math.min(lot, 10));
 }
 
-// Auto tracking (uses fetchPriceForTracking – no extra credits)
 function startAutoTracking() {
     if (autoTrackInterval) clearInterval(autoTrackInterval);
     if (!autoTrackingEnabled) return;
