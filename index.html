@@ -28,12 +28,10 @@
             overflow-x: hidden;
         }
         
-        /* Custom Scrollbar */
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: var(--bg-secondary); }
         ::-webkit-scrollbar-thumb { background: var(--accent-primary); border-radius: 10px; }
         
-        /* Glass Morphism */
         .glass {
             background: rgba(15, 21, 34, 0.7);
             backdrop-filter: blur(12px);
@@ -46,7 +44,6 @@
             border-radius: 2rem;
         }
         
-        /* Mode Toggle */
         .mode-toggle {
             position: relative;
             background: var(--bg-secondary);
@@ -72,32 +69,27 @@
             box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
         }
         
-        /* Signal Display */
         .signal-buy { color: var(--accent-buy); text-shadow: 0 0 20px rgba(0,255,136,0.3); }
         .signal-sell { color: var(--accent-sell); text-shadow: 0 0 20px rgba(255,68,102,0.3); }
         .signal-wait { color: var(--accent-wait); text-shadow: 0 0 20px rgba(255,170,0,0.3); }
         
-        /* Pulse Animation for Loading */
         @keyframes pulse {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.5; }
         }
         .loading-pulse { animation: pulse 1.5s ease-in-out infinite; }
         
-        /* Value Display */
         .value-large {
             font-size: 2.5rem;
             font-weight: 800;
             letter-spacing: -0.02em;
         }
         
-        /* Responsive */
         @media (max-width: 640px) {
             .value-large { font-size: 1.75rem; }
             .glass-card { padding: 1rem; }
         }
         
-        /* Loading Overlay */
         #loadingOverlay {
             position: fixed;
             inset: 0;
@@ -110,7 +102,6 @@
             flex-direction: column;
         }
         
-        /* Input Styling */
         .input-dark {
             background: var(--bg-secondary);
             border: 1px solid var(--border-subtle);
@@ -126,7 +117,6 @@
             box-shadow: 0 0 10px rgba(99,102,241,0.2);
         }
         
-        /* Metric Badge */
         .metric-badge {
             background: rgba(99,102,241,0.1);
             border: 1px solid rgba(99,102,241,0.2);
@@ -292,7 +282,7 @@
         </button>
 
         <!-- Settings Drawer -->
-        <div id="settingsDrawer" class="fixed top-0 right-0 h-full w-full max-w-md bg-[#0a0f1a] z-50 transform translate-x-full transition-transform duration-300 shadow-2xl">
+        <div id="settingsDrawer" class="fixed top-0 right-0 h-full w-full max-w-md bg-[#0a0f1a] z-50 transform translate-x-full transition-transform duration-300 shadow-2xl overflow-y-auto">
             <div class="p-8">
                 <div class="flex justify-between items-center mb-8">
                     <h3 class="text-xl font-black italic">⚙️ CONFIGURATION</h3>
@@ -301,28 +291,40 @@
                 
                 <div class="space-y-6">
                     <div>
-                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">GEMINI API KEY</label>
+                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">🔑 GEMINI API KEY</label>
                         <input type="password" id="apiKey" class="input-dark w-full font-mono text-sm" placeholder="Enter your Gemini API key">
-                        <p class="text-[8px] text-slate-500 mt-1">Required for AI analysis | Get from aistudio.google.com</p>
+                        <p class="text-[8px] text-slate-500 mt-1">Get from <a href="https://aistudio.google.com" target="_blank" class="text-indigo-400">aistudio.google.com</a> | Supports 2.5 Flash & 2.5 Flash Lite</p>
                     </div>
                     
                     <div class="grid grid-cols-2 gap-4">
                         <div>
-                            <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">BALANCE ($)</label>
+                            <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">💰 BALANCE ($)</label>
                             <input type="number" id="balance" class="input-dark w-full" placeholder="10000" value="10000">
                         </div>
                         <div>
-                            <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">RISK %</label>
+                            <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">⚠️ RISK %</label>
                             <input type="number" id="riskPercent" class="input-dark w-full" placeholder="1.0" value="1.0" step="0.1">
                         </div>
                     </div>
                     
+                    <!-- MODEL SELECTOR - FULLY ADDED HERE -->
                     <div>
-                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">FAILOVER MODEL</label>
-                        <select id="failoverModel" class="input-dark w-full">
-                            <option value="gemini-2.0-flash-lite">Gemini 2.0 Flash Lite (Free)</option>
-                            <option value="gemini-2.0-flash">Gemini 2.0 Flash (Faster)</option>
+                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">🤖 AI MODEL</label>
+                        <select id="modelSelect" class="input-dark w-full">
+                            <option value="gemini-2.5-flash-lite">🚀 Gemini 2.5 Flash Lite (Faster - Recommended)</option>
+                            <option value="gemini-2.5-flash">🎯 Gemini 2.5 Flash (Premium Quality)</option>
+                            <option value="both">🔄 Both (Primary Lite + Fallback Flash)</option>
                         </select>
+                        <p class="text-[8px] text-slate-500 mt-1">Both models are 100% compatible with your API. "Both" provides automatic failover.</p>
+                    </div>
+                    
+                    <div>
+                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">📊 TELEGRAM ALERTS</label>
+                        <div class="flex items-center gap-3">
+                            <input type="text" id="telegramBotToken" class="input-dark flex-1" placeholder="Bot Token (optional)">
+                            <input type="text" id="telegramChatId" class="input-dark flex-1" placeholder="Chat ID (optional)">
+                        </div>
+                        <p class="text-[8px] text-slate-500 mt-1">Leave empty to disable. Get from <a href="https://t.me/BotFather" target="_blank" class="text-indigo-400">@BotFather</a></p>
                     </div>
                     
                     <button id="saveSettings" class="w-full py-4 bg-indigo-600 rounded-xl font-black text-sm uppercase tracking-wider hover:bg-indigo-700 transition-all">
