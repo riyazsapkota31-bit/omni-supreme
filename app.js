@@ -1,6 +1,5 @@
 /**
  * OMNI-SIGNAL - Main Application (credit‑efficient auto tracking)
- * Supports all XM assets: XAUUSD, XAGUSD, OILCash, EURUSD, GBPUSD, BTCUSD, ETHUSD
  */
 
 const elements = {
@@ -148,7 +147,7 @@ function calculateLotSize(entry, sl, balance, riskPercent) {
     return Math.max(0.01, Math.min(lot, 10));
 }
 
-// --- CREDIT-EFFICIENT AUTO TRACKING ---
+// --- CREDIT-EFFICIENT AUTO TRACKING (uses fetchPriceForTracking) ---
 function startAutoTracking() {
     if (autoTrackInterval) clearInterval(autoTrackInterval);
     if (!autoTrackingEnabled) return;
