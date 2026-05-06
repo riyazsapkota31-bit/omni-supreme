@@ -1,19 +1,17 @@
 /**
  * MARKET DATA FETCHER - Multi-API fallback with CORS proxies
- * Order: Alpha Vantage (proxy) → Twelve Data (direct) → Binance (direct) → Yahoo (proxy)
+ * Order: Alpha Vantage → Twelve Data → Binance → Yahoo
  */
 
 const MarketData = {
     alphaKey: null,
 
-    // Yahoo symbol mapping (used only as last resort)
     yahooMap: {
         'XAUUSD': 'GC=F', 'XAGUSD': 'SI=F', 'OILCash': 'CL=F',
         'EURUSD': 'EURUSD=X', 'GBPUSD': 'GBPUSD=X',
         'BTCUSD': 'BTC-USD', 'ETHUSD': 'ETH-USD'
     },
 
-    // Asset metadata for XM
     assetInfo: {
         'XAUUSD': { class: 'commodities', spread: 0.20, multiplier: 100, name: 'Gold', digits: 2 },
         'XAGUSD': { class: 'commodities', spread: 0.03, multiplier: 100, name: 'Silver', digits: 3 },
@@ -27,7 +25,6 @@ const MarketData = {
     setAlphaKey(key) { this.alphaKey = key; localStorage.setItem('alpha_api_key', key); },
     getAlphaKey() { if (!this.alphaKey) this.alphaKey = localStorage.getItem('alpha_api_key'); return this.alphaKey; },
 
-    // Helper: fetch with CORS proxy (for APIs that block direct browser requests)
     async fetchWithProxy(url) {
         const proxy = 'https://api.allorigins.win/raw?url=';
         const response = await fetch(proxy + encodeURIComponent(url));
@@ -39,7 +36,7 @@ const MarketData = {
         const info = this.assetInfo[xmSymbol];
         if (!info) return null;
 
-        // ---------- 1. Alpha Vantage (via proxy, requires API key) ----------
+        // 1. Alpha Vantage (via proxy)
         const alphaKey = this.getAlphaKey();
         if (alphaKey) {
             try {
@@ -66,13 +63,13 @@ const MarketData = {
                         trend: 'SIDEWAYS',
                         volatility: 0.3,
                         ...info,
-                        _source: 'Alpha Vantage (proxy)'
+                        _source: 'Alpha Vantage'
                     };
                 }
-            } catch (e) { console.warn('Alpha Vantage failed:', e); }
+            } catch(e) { console.warn('Alpha Vantage failed:', e); }
         }
 
-        // ---------- 2. Twelve Data (demo key, no proxy needed) ----------
+        // 2. Twelve Data (direct, demo key)
         try {
             const url = `https://api.twelvedata.com/time_series?symbol=${xmSymbol}&interval=1h&outputsize=100&apikey=demo`;
             const resp = await fetch(url);
@@ -103,9 +100,9 @@ const MarketData = {
                     _source: 'Twelve Data'
                 };
             }
-        } catch (e) { console.warn('Twelve Data failed:', e); }
+        } catch(e) { console.warn('Twelve Data failed:', e); }
 
-        // ---------- 3. Binance (crypto only, direct, no proxy needed) ----------
+        // 3. Binance (crypto only)
         if (info.class === 'crypto') {
             try {
                 let binSym = xmSymbol === 'BTCUSD' ? 'BTCUSDT' : (xmSymbol === 'ETHUSD' ? 'ETHUSDT' : null);
@@ -114,7 +111,6 @@ const MarketData = {
                     const data = await resp.json();
                     if (!data.code) {
                         const price = parseFloat(data.lastPrice);
-                        // Get historical data for indicators
                         const klines = await fetch(`https://api.binance.com/api/v3/klines?symbol=${binSym}&interval=1h&limit=100`);
                         const kd = await klines.json();
                         const closes = kd.map(c => parseFloat(c[4]));
@@ -137,14 +133,14 @@ const MarketData = {
                             trend: this.determineTrend(closes),
                             volatility: this.calcATR(highs, lows, closes, 14) / price * 100,
                             ...info,
-                            _source: 'Binance (real-time)'
+                            _source: 'Binance'
                         };
                     }
                 }
-            } catch (e) { console.warn('Binance failed:', e); }
+            } catch(e) { console.warn('Binance failed:', e); }
         }
 
-        // ---------- 4. Yahoo Finance (via proxy, last resort) ----------
+        // 4. Yahoo Finance (via proxy, last resort)
         const yahooSym = this.yahooMap[xmSymbol];
         if (yahooSym) {
             try {
@@ -178,14 +174,14 @@ const MarketData = {
                         _source: 'Yahoo (proxy)'
                     };
                 }
-            } catch (e) { console.warn('Yahoo failed:', e); }
+            } catch(e) { console.warn('Yahoo failed:', e); }
         }
 
         console.error(`All APIs failed for ${xmSymbol}`);
         return null;
     },
 
-    // ---------- Technical indicators ----------
+    // Technical indicators
     calcRSI(prices, period) {
         if (prices.length < period + 1) return 50;
         let gains = 0, losses = 0;
