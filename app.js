@@ -1,189 +1,66 @@
 /**
- * OMNI—SUPREME - XM Edition
- * Complete Application Controller
+ * OMNI—SUPREME - XM Edition with OANDA Support
  */
 
 const elements = {
-    analyzeBtn: document.getElementById('analyzeBtn'),
-    modeScalp: document.getElementById('modeScalp'),
-    modeDay: document.getElementById('modeDay'),
-    modeDescription: document.getElementById('modeDescription'),
-    loadingOverlay: document.getElementById('loadingOverlay'),
-    settingsBtn: document.getElementById('settingsBtn'),
-    settingsDrawer: document.getElementById('settingsDrawer'),
-    drawerOverlay: document.getElementById('drawerOverlay'),
-    closeSettings: document.getElementById('closeSettings'),
-    saveSettings: document.getElementById('saveSettings'),
-    apiKey: document.getElementById('apiKey'),
-    balance: document.getElementById('balance'),
-    riskPercent: document.getElementById('riskPercent'),
-    modelSelect: document.getElementById('modelSelect'),
-    telegramBotToken: document.getElementById('telegramBotToken'),
-    telegramChatId: document.getElementById('telegramChatId'),
-    testTelegramBtn: document.getElementById('testTelegramBtn'),
-    themeToggle: document.getElementById('themeToggle'),
-    soundToggle: document.getElementById('soundToggle'),
-    clearHistoryBtn: document.getElementById('clearHistoryBtn'),
-    addXmSymbolBtn: document.getElementById('addXmSymbolBtn'),
-    currentSymbolDisplay: document.getElementById('currentSymbolDisplay'),
-    currentPrice: document.getElementById('currentPrice'),
-    rsiValue: document.getElementById('rsiValue'),
-    atrValue: document.getElementById('atrValue'),
-    highValue: document.getElementById('highValue'),
-    lowValue: document.getElementById('lowValue'),
-    signalBias: document.getElementById('signalBias'),
-    confidenceScore: document.getElementById('confidenceScore'),
-    entryPrice: document.getElementById('entryPrice'),
-    stopLoss: document.getElementById('stopLoss'),
-    takeProfit: document.getElementById('takeProfit'),
-    lotSize: document.getElementById('lotSize'),
-    rrRatio: document.getElementById('rrRatio'),
-    tradeType: document.getElementById('tradeType'),
-    assetClass: document.getElementById('assetClass'),
-    activeStrategy: document.getElementById('activeStrategy'),
-    logicText: document.getElementById('logicText'),
-    poiContainer: document.getElementById('poiContainer'),
-    poiLevel: document.getElementById('poiLevel'),
-    poiLogic: document.getElementById('poiLogic'),
-    historyList: document.getElementById('historyList'),
-    xmWatchlistContainer: document.getElementById('xmWatchlistContainer')
+    analyzeBtn: document.getElementById('analyzeBtn'), modeScalp: document.getElementById('modeScalp'), modeDay: document.getElementById('modeDay'),
+    modeDescription: document.getElementById('modeDescription'), loadingOverlay: document.getElementById('loadingOverlay'),
+    settingsBtn: document.getElementById('settingsBtn'), settingsDrawer: document.getElementById('settingsDrawer'),
+    drawerOverlay: document.getElementById('drawerOverlay'), closeSettings: document.getElementById('closeSettings'),
+    saveSettings: document.getElementById('saveSettings'), apiKey: document.getElementById('apiKey'), oandaKey: document.getElementById('oandaKey'),
+    balance: document.getElementById('balance'), riskPercent: document.getElementById('riskPercent'), modelSelect: document.getElementById('modelSelect'),
+    telegramBotToken: document.getElementById('telegramBotToken'), telegramChatId: document.getElementById('telegramChatId'),
+    testTelegramBtn: document.getElementById('testTelegramBtn'), themeToggle: document.getElementById('themeToggle'),
+    soundToggle: document.getElementById('soundToggle'), clearHistoryBtn: document.getElementById('clearHistoryBtn'),
+    addXmSymbolBtn: document.getElementById('addXmSymbolBtn'), currentSymbolDisplay: document.getElementById('currentSymbolDisplay'),
+    currentPrice: document.getElementById('currentPrice'), rsiValue: document.getElementById('rsiValue'), atrValue: document.getElementById('atrValue'),
+    highValue: document.getElementById('highValue'), lowValue: document.getElementById('lowValue'), signalBias: document.getElementById('signalBias'),
+    confidenceScore: document.getElementById('confidenceScore'), entryPrice: document.getElementById('entryPrice'), stopLoss: document.getElementById('stopLoss'),
+    takeProfit: document.getElementById('takeProfit'), lotSize: document.getElementById('lotSize'), rrRatio: document.getElementById('rrRatio'),
+    tradeType: document.getElementById('tradeType'), assetClass: document.getElementById('assetClass'), activeStrategy: document.getElementById('activeStrategy'),
+    logicText: document.getElementById('logicText'), poiContainer: document.getElementById('poiContainer'), poiLevel: document.getElementById('poiLevel'),
+    poiLogic: document.getElementById('poiLogic'), historyList: document.getElementById('historyList'), xmWatchlistContainer: document.getElementById('xmWatchlistContainer')
 };
 
-let currentMode = 'scalp';
-let currentMarketData = null;
-let currentXmSymbol = 'GOLD';
-let soundEnabled = true;
-let history = [];
+let currentMode = 'scalp', currentMarketData = null, currentXmSymbol = 'GOLD', soundEnabled = true, history = [];
 let xmWatchlist = ['GOLD', 'SILVER', 'OILCash', 'EURUSD', 'GBPUSD', 'BTCUSD', 'ETHUSD'];
 
-function loadHistory() {
-    const saved = localStorage.getItem('omni_supreme_history');
-    if (saved) { history = JSON.parse(saved); renderHistory(); }
-}
-
+function loadHistory() { const saved = localStorage.getItem('omni_supreme_history'); if (saved) { history = JSON.parse(saved); renderHistory(); } }
 function saveHistory() { localStorage.setItem('omni_supreme_history', JSON.stringify(history.slice(-100))); renderHistory(); }
-
-function addToHistory(signalData, marketData, tradeLevels) {
-    history.unshift({
-        id: Date.now(), timestamp: new Date().toISOString(), symbol: currentXmSymbol, mode: currentMode,
-        bias: signalData.bias, confidence: signalData.confidence, entry: tradeLevels.entry,
-        stopLoss: tradeLevels.stopLoss, takeProfit: tradeLevels.takeProfit, rr: tradeLevels.rrRatio,
-        price: marketData.currentPrice, strategy: signalData.primaryStrategy
-    });
-    saveHistory();
-}
+function addToHistory(signalData, marketData, tradeLevels) { history.unshift({ id: Date.now(), timestamp: new Date().toISOString(), symbol: currentXmSymbol, mode: currentMode, bias: signalData.bias, confidence: signalData.confidence, entry: tradeLevels.entry, stopLoss: tradeLevels.stopLoss, takeProfit: tradeLevels.takeProfit, rr: tradeLevels.rrRatio, price: marketData.currentPrice, strategy: signalData.primaryStrategy }); saveHistory(); }
 
 function renderHistory() {
     if (!elements.historyList) return;
     if (history.length === 0) { elements.historyList.innerHTML = '<p class="text-center text-slate-500 text-xs py-4">No signals recorded yet</p>'; return; }
-    elements.historyList.innerHTML = history.slice(0, 30).map(record => `
-        <div class="backtest-item slide-in">
-            <div class="flex justify-between items-start">
-                <div><span class="font-bold ${record.bias === 'BUY' ? 'text-emerald-400' : record.bias === 'SELL' ? 'text-rose-400' : 'text-amber-400'}">${record.bias}</span>
-                <span class="text-[10px] text-slate-500 ml-2">${record.symbol}</span><span class="text-[9px] text-slate-600 ml-2">${record.mode}</span></div>
-                <span class="text-[9px] text-slate-500">${new Date(record.timestamp).toLocaleTimeString()}</span>
-            </div>
-            <div class="flex gap-3 mt-1 text-[10px] flex-wrap">
-                <span>Entry: ${record.entry || '--'}</span><span>SL: ${record.stopLoss || '--'}</span>
-                <span>TP: ${record.takeProfit || '--'}</span><span>RR: 1:${record.rr?.toFixed(1) || '0'}</span>
-            </div>
-            <div class="text-[9px] text-slate-400 mt-1">${record.strategy} | ${record.confidence}% confidence</div>
-        </div>
-    `).join('');
+    elements.historyList.innerHTML = history.slice(0, 30).map(record => `<div class="backtest-item slide-in"><div class="flex justify-between items-start"><div><span class="font-bold ${record.bias === 'BUY' ? 'text-emerald-400' : record.bias === 'SELL' ? 'text-rose-400' : 'text-amber-400'}">${record.bias}</span><span class="text-[10px] text-slate-500 ml-2">${record.symbol}</span><span class="text-[9px] text-slate-600 ml-2">${record.mode}</span></div><span class="text-[9px] text-slate-500">${new Date(record.timestamp).toLocaleTimeString()}</span></div><div class="flex gap-3 mt-1 text-[10px] flex-wrap"><span>Entry: ${record.entry || '--'}</span><span>SL: ${record.stopLoss || '--'}</span><span>TP: ${record.takeProfit || '--'}</span><span>RR: 1:${record.rr?.toFixed(1) || '0'}</span></div><div class="text-[9px] text-slate-400 mt-1">${record.strategy} | ${record.confidence}% confidence</div></div>`).join('');
 }
 
 function clearHistory() { if (confirm('Clear all backtest history?')) { history = []; saveHistory(); showToast('History cleared', 'info'); } }
 
-function initTheme() {
-    const savedTheme = localStorage.getItem('omni_supreme_theme');
-    if (savedTheme === 'light') { document.documentElement.setAttribute('data-theme', 'light'); elements.themeToggle.innerHTML = '<i class="fa-solid fa-sun text-yellow-400 text-xl"></i>'; }
-    else { document.documentElement.setAttribute('data-theme', 'dark'); elements.themeToggle.innerHTML = '<i class="fa-solid fa-moon text-slate-400 text-xl"></i>'; }
-}
-
-function toggleTheme() {
-    const currentTheme = document.documentElement.getAttribute('data-theme');
-    if (currentTheme === 'light') { document.documentElement.setAttribute('data-theme', 'dark'); localStorage.setItem('omni_supreme_theme', 'dark'); elements.themeToggle.innerHTML = '<i class="fa-solid fa-moon text-slate-400 text-xl"></i>'; }
-    else { document.documentElement.setAttribute('data-theme', 'light'); localStorage.setItem('omni_supreme_theme', 'light'); elements.themeToggle.innerHTML = '<i class="fa-solid fa-sun text-yellow-400 text-xl"></i>'; }
-}
+function initTheme() { const savedTheme = localStorage.getItem('omni_supreme_theme'); if (savedTheme === 'light') { document.documentElement.setAttribute('data-theme', 'light'); elements.themeToggle.innerHTML = '<i class="fa-solid fa-sun text-yellow-400 text-xl"></i>'; } else { document.documentElement.setAttribute('data-theme', 'dark'); elements.themeToggle.innerHTML = '<i class="fa-solid fa-moon text-slate-400 text-xl"></i>'; } }
+function toggleTheme() { const currentTheme = document.documentElement.getAttribute('data-theme'); if (currentTheme === 'light') { document.documentElement.setAttribute('data-theme', 'dark'); localStorage.setItem('omni_supreme_theme', 'dark'); elements.themeToggle.innerHTML = '<i class="fa-solid fa-moon text-slate-400 text-xl"></i>'; } else { document.documentElement.setAttribute('data-theme', 'light'); localStorage.setItem('omni_supreme_theme', 'light'); elements.themeToggle.innerHTML = '<i class="fa-solid fa-sun text-yellow-400 text-xl"></i>'; } }
 
 function playSound() { if (!soundEnabled) return; const audio = document.getElementById('alertSound'); if (audio) { audio.currentTime = 0; audio.play().catch(e => console.log('Audio play failed')); } }
 function toggleSound() { soundEnabled = !soundEnabled; elements.soundToggle.innerHTML = soundEnabled ? '<i class="fa-solid fa-volume-up mr-1"></i> Sound ON' : '<i class="fa-solid fa-volume-mute mr-1"></i> Sound OFF'; localStorage.setItem('omni_supreme_sound', soundEnabled); }
 
-function showToast(message, type = 'info') {
-    const toast = document.createElement('div');
-    toast.className = 'toast';
-    toast.style.background = type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#6366f1';
-    toast.innerHTML = message;
-    document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), 3000);
-}
+function showToast(message, type = 'info') { const toast = document.createElement('div'); toast.className = 'toast'; toast.style.background = type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#6366f1'; toast.innerHTML = message; document.body.appendChild(toast); setTimeout(() => toast.remove(), 3000); }
 
-async function sendTelegramAlert(message) {
-    const botToken = localStorage.getItem('omni_supreme_telegram_bot');
-    const chatId = localStorage.getItem('omni_supreme_telegram_chat');
-    if (!botToken || !chatId) return false;
-    try {
-        const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chat_id: chatId, text: message, parse_mode: 'HTML' })
-        });
-        const data = await response.json();
-        return data.ok;
-    } catch (error) { return false; }
-}
+async function sendTelegramAlert(message) { const botToken = localStorage.getItem('omni_supreme_telegram_bot'); const chatId = localStorage.getItem('omni_supreme_telegram_chat'); if (!botToken || !chatId) return false; try { const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: chatId, text: message, parse_mode: 'HTML' }) }); const data = await response.json(); return data.ok; } catch (error) { return false; } }
 
-async function testTelegram() {
-    const botToken = elements.telegramBotToken?.value;
-    const chatId = elements.telegramChatId?.value;
-    if (!botToken || !chatId) { showToast('Enter Bot Token and Chat ID first', 'error'); return; }
-    showToast('Sending test message...', 'info');
-    const success = await sendTelegramAlert('✅ OMNI-SUPREME Test: Your Telegram alerts are working!');
-    if (success) showToast('Test message sent! Check Telegram', 'success');
-    else showToast('Failed to send. Check your token and chat ID', 'error');
-}
+async function testTelegram() { const botToken = elements.telegramBotToken?.value; const chatId = elements.telegramChatId?.value; if (!botToken || !chatId) { showToast('Enter Bot Token and Chat ID first', 'error'); return; } showToast('Sending test message...', 'info'); const success = await sendTelegramAlert('✅ OMNI-SUPREME Test: Your Telegram alerts are working!'); if (success) showToast('Test message sent! Check Telegram', 'success'); else showToast('Failed to send. Check your token and chat ID', 'error'); }
 
 function renderXMWatchlist() {
     if (!elements.xmWatchlistContainer) return;
-    elements.xmWatchlistContainer.innerHTML = xmWatchlist.map((symbol, idx) => `
-        <div class="xm-symbol-card ${currentXmSymbol === symbol ? 'active' : ''}" data-symbol="${symbol}" onclick="selectXmSymbol('${symbol}')">
-            <div class="flex justify-between items-center">
-                <span class="font-bold font-mono text-sm">${MarketData.xmSymbols[symbol]?.displayName || symbol}</span>
-                <button class="remove-symbol text-slate-500 hover:text-rose-400 text-xs px-2" onclick="event.stopPropagation(); removeXmSymbol('${symbol}')">✕</button>
-            </div>
-            <div class="mt-1"><p class="text-[10px] text-slate-400">Price: <span id="price_${symbol.replace(/[^a-zA-Z0-9]/g, '_')}">--</span></p></div>
-        </div>
-    `).join('');
-    xmWatchlist.forEach(async (symbol) => {
-        try { const data = await MarketData.fetch(symbol); if (data) { const span = document.getElementById(`price_${symbol.replace(/[^a-zA-Z0-9]/g, '_')}`); if (span) span.textContent = data.currentPrice.toFixed(data.digits || 2); } } catch(e) {}
-    });
+    elements.xmWatchlistContainer.innerHTML = xmWatchlist.map((symbol, idx) => `<div class="xm-symbol-card ${currentXmSymbol === symbol ? 'active' : ''}" data-symbol="${symbol}" onclick="selectXmSymbol('${symbol}')"><div class="flex justify-between items-center"><span class="font-bold font-mono text-sm">${MarketData.xmSymbols[symbol]?.displayName || symbol}</span><button class="remove-symbol text-slate-500 hover:text-rose-400 text-xs px-2" onclick="event.stopPropagation(); removeXmSymbol('${symbol}')">✕</button></div><div class="mt-1"><p class="text-[10px] text-slate-400">Price: <span id="price_${symbol.replace(/[^a-zA-Z0-9]/g, '_')}">--</span></p></div></div>`).join('');
+    xmWatchlist.forEach(async (symbol) => { try { const data = await MarketData.fetch(symbol); if (data) { const span = document.getElementById(`price_${symbol.replace(/[^a-zA-Z0-9]/g, '_')}`); if (span) span.textContent = data.currentPrice.toFixed(data.digits || 2); } } catch(e) {} });
 }
 
 window.selectXmSymbol = function(symbol) { currentXmSymbol = symbol; elements.currentSymbolDisplay.textContent = MarketData.xmSymbols[symbol]?.displayName || symbol; renderXMWatchlist(); loadMarketData(); showToast(`Switched to ${symbol}`, 'info'); };
 window.removeXmSymbol = function(symbol) { if (xmWatchlist.length <= 1) { showToast('Cannot remove last symbol', 'error'); return; } xmWatchlist = xmWatchlist.filter(s => s !== symbol); if (currentXmSymbol === symbol) currentXmSymbol = xmWatchlist[0]; localStorage.setItem('omni_supreme_watchlist', JSON.stringify(xmWatchlist)); renderXMWatchlist(); loadMarketData(); showToast(`Removed ${symbol}`, 'info'); };
 
-function addXmSymbol() {
-    const newSymbol = prompt('Enter XM symbol name (e.g., GOLD, EURUSD, BTCUSD):', '');
-    if (newSymbol && !xmWatchlist.includes(newSymbol.toUpperCase())) {
-        xmWatchlist.push(newSymbol.toUpperCase());
-        localStorage.setItem('omni_supreme_watchlist', JSON.stringify(xmWatchlist));
-        renderXMWatchlist();
-        showToast(`✅ Added ${newSymbol.toUpperCase()}`, 'success');
-    } else if (newSymbol) showToast(`⚠️ ${newSymbol} already exists`, 'error');
-}
+function addXmSymbol() { const newSymbol = prompt('Enter XM symbol name (e.g., GOLD, EURUSD, BTCUSD):', ''); if (newSymbol && !xmWatchlist.includes(newSymbol.toUpperCase())) { xmWatchlist.push(newSymbol.toUpperCase()); localStorage.setItem('omni_supreme_watchlist', JSON.stringify(xmWatchlist)); renderXMWatchlist(); showToast(`✅ Added ${newSymbol.toUpperCase()}`, 'success'); } else if (newSymbol) showToast(`⚠️ ${newSymbol} already exists`, 'error'); }
 
-function init() {
-    loadHistory();
-    initTheme();
-    const savedSound = localStorage.getItem('omni_supreme_sound');
-    if (savedSound !== null) soundEnabled = savedSound === 'true';
-    elements.soundToggle.innerHTML = soundEnabled ? '<i class="fa-solid fa-volume-up mr-1"></i> Sound ON' : '<i class="fa-solid fa-volume-mute mr-1"></i> Sound OFF';
-    const savedWatchlist = localStorage.getItem('omni_supreme_watchlist');
-    if (savedWatchlist) { try { const parsed = JSON.parse(savedWatchlist); if (parsed.length > 0) xmWatchlist = parsed; } catch(e) {} }
-    loadSavedSettings();
-    setupEventListeners();
-    renderXMWatchlist();
-    loadDefaultData();
-}
+function init() { loadHistory(); initTheme(); const savedSound = localStorage.getItem('omni_supreme_sound'); if (savedSound !== null) soundEnabled = savedSound === 'true'; elements.soundToggle.innerHTML = soundEnabled ? '<i class="fa-solid fa-volume-up mr-1"></i> Sound ON' : '<i class="fa-solid fa-volume-mute mr-1"></i> Sound OFF'; const savedWatchlist = localStorage.getItem('omni_supreme_watchlist'); if (savedWatchlist) { try { const parsed = JSON.parse(savedWatchlist); if (parsed.length > 0) xmWatchlist = parsed; } catch(e) {} } loadSavedSettings(); setupEventListeners(); renderXMWatchlist(); loadDefaultData(); }
 
 function setupEventListeners() {
     if (elements.analyzeBtn) elements.analyzeBtn.addEventListener('click', executeAnalysis);
@@ -212,11 +89,13 @@ function loadSavedSettings() {
     if (saved) {
         try { const config = JSON.parse(saved);
             if (elements.apiKey) elements.apiKey.value = config.apiKey || '';
+            if (elements.oandaKey) elements.oandaKey.value = config.oandaKey || '';
             if (elements.balance) elements.balance.value = config.balance || '10000';
             if (elements.riskPercent) elements.riskPercent.value = config.riskPercent || '1.0';
             if (elements.modelSelect) elements.modelSelect.value = config.model || 'gemini-2.5-flash-lite';
             if (elements.telegramBotToken) elements.telegramBotToken.value = config.telegramBot || '';
             if (elements.telegramChatId) elements.telegramChatId.value = config.telegramChat || '';
+            if (config.oandaKey) MarketData.setOandaKey(config.oandaKey);
             if (config.telegramBot) localStorage.setItem('omni_supreme_telegram_bot', config.telegramBot);
             if (config.telegramChat) localStorage.setItem('omni_supreme_telegram_chat', config.telegramChat);
         } catch(e) { console.error('Load settings error:', e); }
@@ -225,12 +104,14 @@ function loadSavedSettings() {
 
 function saveSettings() {
     const config = {
-        apiKey: elements.apiKey?.value || '', balance: elements.balance?.value || '10000',
-        riskPercent: elements.riskPercent?.value || '1.0', model: elements.modelSelect?.value || 'gemini-2.5-flash-lite',
+        apiKey: elements.apiKey?.value || '', oandaKey: elements.oandaKey?.value || '',
+        balance: elements.balance?.value || '10000', riskPercent: elements.riskPercent?.value || '1.0',
+        model: elements.modelSelect?.value || 'gemini-2.5-flash-lite',
         telegramBot: elements.telegramBotToken?.value || '', telegramChat: elements.telegramChatId?.value || ''
     };
     localStorage.setItem('omni_supreme_config', JSON.stringify(config));
     localStorage.setItem('gemini_api_key', config.apiKey);
+    if (config.oandaKey) MarketData.setOandaKey(config.oandaKey);
     localStorage.setItem('omni_supreme_telegram_bot', config.telegramBot);
     localStorage.setItem('omni_supreme_telegram_chat', config.telegramChat);
     if (elements.saveSettings) { elements.saveSettings.textContent = '✓ SAVED'; setTimeout(() => { if (elements.saveSettings) elements.saveSettings.textContent = 'SAVE & SECURE'; }, 1500); }
@@ -238,14 +119,9 @@ function saveSettings() {
     showToast('✅ Settings saved permanently!', 'success');
 }
 
-function toggleSettings() {
-    const isOpen = elements.settingsDrawer?.classList.contains('translate-x-0');
-    if (isOpen) { elements.settingsDrawer?.classList.remove('translate-x-0'); elements.settingsDrawer?.classList.add('translate-x-full'); elements.drawerOverlay?.classList.add('hidden'); }
-    else { elements.settingsDrawer?.classList.remove('translate-x-full'); elements.settingsDrawer?.classList.add('translate-x-0'); elements.drawerOverlay?.classList.remove('hidden'); }
-}
+function toggleSettings() { const isOpen = elements.settingsDrawer?.classList.contains('translate-x-0'); if (isOpen) { elements.settingsDrawer?.classList.remove('translate-x-0'); elements.settingsDrawer?.classList.add('translate-x-full'); elements.drawerOverlay?.classList.add('hidden'); } else { elements.settingsDrawer?.classList.remove('translate-x-full'); elements.settingsDrawer?.classList.add('translate-x-0'); elements.drawerOverlay?.classList.remove('hidden'); } }
 
 async function loadDefaultData() { try { currentMarketData = await MarketData.fetch(currentXmSymbol); if (currentMarketData) updateMetricsDisplay(currentMarketData); } catch (error) { console.error('Initial data load failed:', error); } }
-
 async function loadMarketData() { showLoading(true); try { currentMarketData = await MarketData.fetch(currentXmSymbol); if (currentMarketData) updateMetricsDisplay(currentMarketData); } catch (error) { console.error('Load failed:', error); } finally { showLoading(false); } }
 
 function updateMetricsDisplay(data) {
@@ -259,13 +135,10 @@ function updateMetricsDisplay(data) {
     if (data.rsi > 70 && elements.rsiValue) elements.rsiValue.style.color = '#ff4466';
     else if (data.rsi < 30 && elements.rsiValue) elements.rsiValue.style.color = '#00ff88';
     else if (elements.rsiValue) elements.rsiValue.style.color = '';
+    if (data._source && elements.logicText && !elements.logicText.innerHTML.includes('SIGNAL')) elements.logicText.innerHTML = `📡 Data source: ${data._source}${data._realtime ? ' (Real-time)' : data._delayed ? ' (Delayed)' : ''}`;
 }
 
-function generateWaitPOI(symbol, lastPrice) {
-    const defaultPOIs = { 'GOLD': 2650, 'SILVER': 30.5, 'OILCash': 75, 'EURUSD': 1.0850, 'GBPUSD': 1.3000, 'BTCUSD': 60000, 'ETHUSD': 2500 };
-    const poi = lastPrice || defaultPOIs[symbol] || 1.0000;
-    return { level: poi, logic: `No market data available. Re-scan when price returns to ${poi} or check internet.` };
-}
+function generateWaitPOI(symbol, lastPrice) { const defaultPOIs = { 'GOLD': 2650, 'SILVER': 30.5, 'OILCash': 75, 'EURUSD': 1.0850, 'GBPUSD': 1.3000, 'BTCUSD': 60000, 'ETHUSD': 2500 }; const poi = lastPrice || defaultPOIs[symbol] || 1.0000; return { level: poi, logic: `No market data available. Re-scan when price returns to ${poi} or check internet.` }; }
 
 async function executeAnalysis() {
     const config = JSON.parse(localStorage.getItem('omni_supreme_config') || '{}');
@@ -299,7 +172,7 @@ async function executeAnalysis() {
         if (signal.bias !== 'WAIT') elements.poiContainer.classList.add('hidden');
         if (signal.bias !== 'WAIT' && tradeLevels.entry) {
             addToHistory(signal, currentMarketData, tradeLevels);
-            const message = `🚀 OMNI-SUPREME SIGNAL\n\nSymbol: ${currentXmSymbol}\nBias: ${signal.bias}\nEntry: ${tradeLevels.entry}\nSL: ${tradeLevels.stopLoss}\nTP: ${tradeLevels.takeProfit}\nRR: 1:${tradeLevels.rrRatio.toFixed(1)}\nStrategy: ${signal.primaryStrategy}`;
+            const message = `🚀 OMNI-SUPREME SIGNAL\n\nSymbol: ${currentXmSymbol}\nBias: ${signal.bias}\nEntry: ${tradeLevels.entry}\nSL: ${tradeLevels.stopLoss}\nTP: ${tradeLevels.takeProfit}\nRR: 1:${tradeLevels.rrRatio.toFixed(1)}\nStrategy: ${signal.primaryStrategy}\nData: ${currentMarketData._source || 'Unknown'}`;
             await sendTelegramAlert(message);
             playSound();
             showToast(`🔔 ${signal.bias} signal generated for ${currentXmSymbol}!`, 'success');
@@ -355,6 +228,7 @@ function renderResults(signal, tradeLevels, poiData, aiAnalysis, marketData) {
         if (elements.rrRatio) { elements.rrRatio.textContent = `1:${tradeLevels.rrRatio.toFixed(1)}`; const minGood = currentMode === 'scalp' ? 2.0 : 4.0; elements.rrRatio.style.color = tradeLevels.rrRatio >= minGood ? '#00ff88' : '#ffaa00'; }
         if (elements.poiContainer) elements.poiContainer.classList.add('hidden');
         let logicText = aiAnalysis?.logic || `${signal.primaryStrategy} triggered. ${signal.confidence}% confluence.`;
+        if (marketData._source) logicText += ` (Data: ${marketData._source}${marketData._realtime ? ' 🔴 Live' : marketData._delayed ? ' ⏰ Delayed' : ''})`;
         if (elements.logicText) elements.logicText.innerHTML = `<span class="text-cyan-400">🎯 ${bias} SIGNAL</span><br>${logicText}`;
     } else {
         if (elements.entryPrice) elements.entryPrice.textContent = '--';
@@ -370,11 +244,6 @@ function renderResults(signal, tradeLevels, poiData, aiAnalysis, marketData) {
     }
 }
 
-function showLoading(show) {
-    if (elements.loadingOverlay) {
-        if (show) { elements.loadingOverlay.style.display = 'flex'; if (elements.analyzeBtn) { elements.analyzeBtn.disabled = true; elements.analyzeBtn.style.opacity = '0.6'; } }
-        else { elements.loadingOverlay.style.display = 'none'; if (elements.analyzeBtn) { elements.analyzeBtn.disabled = false; elements.analyzeBtn.style.opacity = '1'; } }
-    }
-}
+function showLoading(show) { if (elements.loadingOverlay) { if (show) { elements.loadingOverlay.style.display = 'flex'; if (elements.analyzeBtn) { elements.analyzeBtn.disabled = true; elements.analyzeBtn.style.opacity = '0.6'; } } else { elements.loadingOverlay.style.display = 'none'; if (elements.analyzeBtn) { elements.analyzeBtn.disabled = false; elements.analyzeBtn.style.opacity = '1'; } } } }
 
 init();
