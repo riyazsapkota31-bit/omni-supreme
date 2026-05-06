@@ -1,12 +1,12 @@
 /**
  * MARKET DATA FETCHER - Corrected typo & reliable proxy
  * Order: Alpha Vantage → Twelve Data → Binance → Yahoo (only for forex/crypto)
+ * Upgrade 3: Reliable DXY fetch with retry & fallback
  */
 
 const MarketData = {
     alphaKey: null,
 
-    // Yahoo used only for Forex and Crypto (not for Gold/Silver/Oil)
     yahooMap: {
         'EURUSD': 'EURUSD=X',
         'GBPUSD': 'GBPUSD=X',
@@ -27,7 +27,6 @@ const MarketData = {
     setAlphaKey(key) { this.alphaKey = key; localStorage.setItem('alpha_api_key', key); },
     getAlphaKey() { if (!this.alphaKey) this.alphaKey = localStorage.getItem('alpha_api_key'); return this.alphaKey; },
 
-    // Use a more reliable CORS proxy
     async fetchWithProxy(url) {
         const proxy = 'https://corsproxy.io/?';
         const response = await fetch(proxy + encodeURIComponent(url));
@@ -39,7 +38,7 @@ const MarketData = {
         const info = this.assetInfo[xmSymbol];
         if (!info) return null;
 
-        // 1. Alpha Vantage (via proxy) – fixed typo
+        // 1. Alpha Vantage (via proxy)
         const alphaKey = this.getAlphaKey();
         if (alphaKey) {
             try {
@@ -72,7 +71,7 @@ const MarketData = {
             } catch(e) { console.warn('Alpha Vantage failed:', e); }
         }
 
-        // 2. Twelve Data (direct, demo key)
+        // 2. Twelve Data (direct)
         try {
             const url = `https://api.twelvedata.com/time_series?symbol=${xmSymbol}&interval=1h&outputsize=100&apikey=demo`;
             const resp = await fetch(url);
@@ -143,7 +142,7 @@ const MarketData = {
             } catch(e) { console.warn('Binance failed:', e); }
         }
 
-        // 4. Yahoo Finance (only for forex/crypto – not for commodities)
+        // 4. Yahoo Finance (only for forex/crypto)
         const yahooSym = this.yahooMap[xmSymbol];
         if (yahooSym) {
             try {
@@ -184,7 +183,49 @@ const MarketData = {
         return null;
     },
 
-    // Technical indicators (same as before)
+    // Upgrade 3: Enhanced DXY fetch with retry and fallback
+    async fetchDXY(retries = 2) {
+        for (let i = 0; i <= retries; i++) {
+            try {
+                const directUrl = 'https://query1.finance.yahoo.com/v8/finance/chart/DX-Y.NYB?interval=1h&range=1d';
+                const data = await this.fetchWithProxy(directUrl);
+                const result = data.chart?.result?.[0];
+                if (result) {
+                    const quotes = result.indicators.quote[0];
+                    const closes = quotes.close.filter(c => c !== null);
+                    if (closes.length > 0) {
+                        const currentPrice = closes[closes.length-1];
+                        let rsi = 50;
+                        if (closes.length >= 15) {
+                            let gains = 0, losses = 0;
+                            for (let j = closes.length-15; j < closes.length-1; j++) {
+                                const diff = closes[j+1] - closes[j];
+                                if (diff > 0) gains += diff;
+                                else losses -= diff;
+                            }
+                            const avgGain = gains / 14;
+                            const avgLoss = losses / 14;
+                            if (avgLoss > 0) rsi = 100 - (100 / (1 + (avgGain / avgLoss)));
+                        }
+                        return {
+                            dxyPrice: currentPrice,
+                            dxyTrend: rsi > 70 ? 'STRONG' : (rsi < 30 ? 'WEAK' : 'NEUTRAL'),
+                            dxyStrength: rsi > 70 ? 'STRONG' : (rsi < 30 ? 'WEAK' : 'NEUTRAL')
+                        };
+                    }
+                }
+                throw new Error('No DXY data');
+            } catch(e) {
+                console.warn(`DXY fetch attempt ${i+1} failed:`, e);
+                if (i === retries) {
+                    return { dxyPrice: 0, dxyTrend: 'NEUTRAL', dxyStrength: 'NEUTRAL' };
+                }
+                await new Promise(r => setTimeout(r, 1000));
+            }
+        }
+    },
+
+    // Technical indicators
     calcRSI(prices, period) {
         if (prices.length < period + 1) return 50;
         let gains = 0, losses = 0;
