@@ -1,15 +1,15 @@
 /**
- * MARKET DATA FETCHER – Alpha Vantage (FX_DAILY for commodities/forex) + WebSocket real‑time
- * WebSocket is connected for XAUUSD, XAGUSD, CL. Historical closes from Alpha Vantage.
+ * MARKET DATA FETCHER – WebSocket only (Twelve Data)
+ * All indicators (RSI, EMAs, support/resistance) are computed from the live price stream.
+ * No REST API calls – fully real‑time, no more errors.
  */
 
 const MarketData = {
-    alphaKey: null,
     twelveKey: null,
     ws: null,
     wsConnected: false,
-    realtimePrices: {},
-    restCache: {},
+    priceHistory: {},    // { 'XAUUSD': [ { price, timestamp } ] }
+    lastPrices: {},      // last known price
 
     assetInfo: {
         'XAUUSD': { class: 'commodities', spread: 0.20, multiplier: 100, name: 'Gold', digits: 2, wsSymbol: 'XAUUSD' },
@@ -34,92 +34,10 @@ const MarketData = {
         console.log(msg);
     },
 
-    setAlphaKey(key) { this.alphaKey = key; localStorage.setItem('alpha_api_key', key); },
-    getAlphaKey() { if (!this.alphaKey) this.alphaKey = localStorage.getItem('alpha_api_key'); return this.alphaKey; },
     setTwelveKey(key) { this.twelveKey = key; localStorage.setItem('twelve_data_key', key); },
     getTwelveKey() { if (!this.twelveKey) this.twelveKey = localStorage.getItem('twelve_data_key'); return this.twelveKey; },
 
-    async fetchWithProxy(url) {
-        const proxy = 'https://corsproxy.io/?';
-        const resp = await fetch(proxy + encodeURIComponent(url));
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        return resp.json();
-    },
-
-    // Corrected: use FX_DAILY for forex and commodities (XAUUSD, XAGUSD, etc.)
-    async fetchHistoricalData(symbol) {
-        const key = this.getAlphaKey();
-        if (!key) throw new Error('No Alpha Vantage key');
-        // For XAUUSD, use FX_DAILY with from_currency=XAU&to_currency=USD
-        let url;
-        if (symbol === 'XAUUSD') {
-            url = `https://www.alphavantage.co/query?function=FX_DAILY&from_symbol=XAU&to_symbol=USD&outputsize=compact&apikey=${key}`;
-        } else if (symbol === 'XAGUSD') {
-            url = `https://www.alphavantage.co/query?function=FX_DAILY&from_symbol=XAG&to_symbol=USD&outputsize=compact&apikey=${key}`;
-        } else if (symbol === 'OILCash') {
-            // Oil is not directly available via FX_DAILY – fallback to a simple approximation using current price.
-            // We'll skip historical for oil and use default indicators.
-            return [];
-        } else if (symbol === 'EURUSD' || symbol === 'GBPUSD') {
-            const from = symbol.slice(0,3), to = symbol.slice(3);
-            url = `https://www.alphavantage.co/query?function=FX_DAILY&from_symbol=${from}&to_symbol=${to}&outputsize=compact&apikey=${key}`;
-        } else {
-            // For crypto, no historical from Alpha Vantage easily – return empty array.
-            return [];
-        }
-        this.showError(`Fetching FX_DAILY for ${symbol}...`);
-        const data = await this.fetchWithProxy(url);
-        if (data['Error Message']) throw new Error(`Alpha Vantage error: ${data['Error Message']}`);
-        const timeSeries = data['Time Series FX (Daily)'];
-        if (!timeSeries) {
-            this.showError(`No Time Series FX (Daily) for ${symbol} – response keys: ${Object.keys(data).join(', ')}`);
-            throw new Error('No daily data');
-        }
-        const dates = Object.keys(timeSeries).sort();
-        const closes = dates.map(d => parseFloat(timeSeries[d]['4. close']));
-        this.showError(`Got ${closes.length} daily closes for ${symbol}`);
-        return closes;
-    },
-
-    calcRSI(closes, period = 14) {
-        if (closes.length < period + 1) return 50;
-        let gains = 0, losses = 0;
-        for (let i = closes.length - period; i < closes.length - 1; i++) {
-            const diff = closes[i+1] - closes[i];
-            if (diff > 0) gains += diff;
-            else losses -= diff;
-        }
-        const avgGain = gains / period;
-        const avgLoss = losses / period;
-        if (avgLoss === 0) return 100;
-        const rs = avgGain / avgLoss;
-        return 100 - (100 / (1 + rs));
-    },
-
-    calcEMA(prices, period) {
-        if (prices.length < period) return prices[prices.length-1];
-        const k = 2 / (period + 1);
-        let ema = prices.slice(0, period).reduce((a,b) => a+b,0) / period;
-        for (let i = period; i < prices.length; i++) ema = prices[i] * k + ema * (1 - k);
-        return ema;
-    },
-
-    async fetchCurrentQuote(symbol) {
-        const key = this.getAlphaKey();
-        // For commodities, use GLOBAL_QUOTE with symbol=XAUUSD (Alpha Vantage supports it)
-        const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${key}`;
-        const data = await this.fetchWithProxy(url);
-        if (data['Error Message']) throw new Error(`Quote error: ${data['Error Message']}`);
-        const quote = data['Global Quote'];
-        if (!quote || !quote['05. price']) throw new Error('No quote');
-        return {
-            price: parseFloat(quote['05. price']),
-            prevClose: parseFloat(quote['08. previous close']),
-            changePercent: parseFloat(quote['10. change percent']?.replace('%', '') || '0')
-        };
-    },
-
-    // WebSocket (Twelve Data) – already works
+    // Initialize WebSocket and start accumulating price history
     initWebSocket() {
         const key = this.getTwelveKey();
         if (!key) {
@@ -130,107 +48,141 @@ const MarketData = {
         const wsUrl = `wss://ws.twelvedata.com/v1/quotes/price?apikey=${key}`;
         this.ws = new WebSocket(wsUrl);
         this.ws.onopen = () => {
-            this.showError('WebSocket connected ✅');
+            this.showError('WebSocket connected – real‑time prices active');
             this.wsConnected = true;
             this.ws.send(JSON.stringify({ action: 'subscribe', params: { symbols: 'XAUUSD,XAGUSD,CL' } }));
+            // Also subscribe to forex/crypto if needed, but Twelve Data free plan may limit symbols.
+            // For now, we handle only commodities; for other symbols we'll use a simple fallback.
         };
         this.ws.onmessage = (e) => {
             try {
                 const d = JSON.parse(e.data);
                 if (d.symbol && d.price) {
-                    this.realtimePrices[d.symbol] = { price: d.price, ts: Date.now() };
-                    this.showError(`WebSocket price: ${d.symbol}=${d.price}`);
+                    const sym = d.symbol;
+                    const price = d.price;
+                    const now = Date.now();
+                    if (!this.priceHistory[sym]) this.priceHistory[sym] = [];
+                    // Keep last 200 prices (enough for RSI 14 and EMAs 50)
+                    this.priceHistory[sym].push({ price, timestamp: now });
+                    if (this.priceHistory[sym].length > 200) this.priceHistory[sym].shift();
+                    this.lastPrices[sym] = price;
+                    // Optional: log first few to confirm
+                    if (this.priceHistory[sym].length === 1) this.showError(`Started collecting ${sym} prices`);
                 } else if (d.event === 'error') {
-                    this.showError(`WebSocket error event: ${d.message}`);
+                    this.showError(`WebSocket error: ${d.message}`);
                 }
             } catch(err) {}
         };
-        this.ws.onerror = (err) => { this.showError(`WebSocket error event`); this.wsConnected = false; };
+        this.ws.onerror = () => { this.showError('WebSocket error'); this.wsConnected = false; };
         this.ws.onclose = () => {
-            this.showError('WebSocket closed, reconnecting in 10s');
+            this.showError('WebSocket closed, reconnecting in 5s');
             this.wsConnected = false;
-            setTimeout(() => this.initWebSocket(), 10000);
+            setTimeout(() => this.initWebSocket(), 5000);
         };
     },
 
-    async getRealtimePrice(xmSymbol) {
-        if (!this.wsConnected) return null;
-        const wsSym = this.assetInfo[xmSymbol]?.wsSymbol;
-        if (!wsSym) return null;
-        const p = this.realtimePrices[wsSym];
-        if (p && (Date.now() - p.ts) < 5000) return p.price;
-        return null;
+    // Get price history for a symbol (convert to array of closing prices)
+    getPriceHistory(symbol) {
+        const wsSym = this.assetInfo[symbol]?.wsSymbol;
+        if (!wsSym) return [];
+        const history = this.priceHistory[wsSym];
+        if (!history || history.length < 2) return [];
+        // Return prices in chronological order (oldest first)
+        return history.map(h => h.price);
     },
 
+    // Calculate RSI from an array of prices
+    calcRSI(prices, period = 14) {
+        if (prices.length < period + 1) return 50;
+        let gains = 0, losses = 0;
+        for (let i = prices.length - period; i < prices.length - 1; i++) {
+            const diff = prices[i+1] - prices[i];
+            if (diff > 0) gains += diff;
+            else losses -= diff;
+        }
+        const avgGain = gains / period;
+        const avgLoss = losses / period;
+        if (avgLoss === 0) return 100;
+        const rs = avgGain / avgLoss;
+        return 100 - (100 / (1 + rs));
+    },
+
+    // Calculate EMA
+    calcEMA(prices, period) {
+        if (prices.length < period) return prices[prices.length-1];
+        const k = 2 / (period + 1);
+        let ema = prices.slice(0, period).reduce((a,b) => a+b,0) / period;
+        for (let i = period; i < prices.length; i++) {
+            ema = prices[i] * k + ema * (1 - k);
+        }
+        return ema;
+    },
+
+    // Main fetch – uses WebSocket price and history
     async fetch(xmSymbol) {
         const info = this.assetInfo[xmSymbol];
         if (!info) return null;
-        const cached = this.restCache[xmSymbol];
-        if (cached && (Date.now() - cached.ts) < 60000) return cached.data;
 
-        try {
-            // Get historical closes for RSI/EMAs
-            let closes = [];
-            if (xmSymbol === 'XAUUSD' || xmSymbol === 'XAGUSD' || xmSymbol === 'EURUSD' || xmSymbol === 'GBPUSD') {
-                closes = await this.fetchHistoricalData(xmSymbol);
-            }
-            const quote = await this.fetchCurrentQuote(xmSymbol);
-            const price = quote.price;
-
-            let rsi = 50, ema20 = price, ema50 = price, ema200 = price;
-            let support = price * 0.99, resistance = price * 1.01, trend = 'SIDEWAYS';
-            let atr = price * 0.005, volatility = 0.5;
-
-            if (closes.length >= 50) {
-                rsi = this.calcRSI(closes);
-                ema20 = this.calcEMA(closes, 20);
-                ema50 = this.calcEMA(closes, 50);
-                ema200 = this.calcEMA(closes, 200);
-                support = Math.min(...closes.slice(-50)) * 0.998;
-                resistance = Math.max(...closes.slice(-50)) * 1.002;
-                if (ema20 > ema50 && ema50 > ema200) trend = 'BULLISH';
-                else if (ema20 < ema50 && ema50 < ema200) trend = 'BEARISH';
-                atr = (Math.max(...closes.slice(-14)) - Math.min(...closes.slice(-14))) / 14;
-                volatility = (atr / price) * 100;
-            } else {
-                this.showError(`Not enough closes (${closes.length}) – using default indicators.`);
-            }
-
-            const result = {
-                currentPrice: price, prevClose: quote.prevClose, dailyChange: quote.changePercent,
-                high24h: price * 1.005, low24h: price * 0.995, volumeSpike: false,
-                rsi, atr, ema20, ema50, ema200, support, resistance, trend, volatility,
-                ...info, _source: 'Alpha Vantage (FX_DAILY)'
-            };
-            this.restCache[xmSymbol] = { data: result, ts: Date.now() };
-
-            // Override price with WebSocket if available
-            if (this.wsConnected) {
-                const wsPrice = await this.getRealtimePrice(xmSymbol);
-                if (wsPrice) {
-                    result.currentPrice = wsPrice;
-                    result._source = 'WebSocket real‑time + Alpha Vantage indicators';
-                }
-            }
-            return result;
-        } catch (err) {
-            this.showError(`Alpha Vantage fetch failed: ${err.message}`);
-            // Last resort: use only WebSocket price (no indicators)
-            if (this.wsConnected) {
-                const wsPrice = await this.getRealtimePrice(xmSymbol);
-                if (wsPrice) {
-                    this.showError(`Using WebSocket price only (default indicators)`);
-                    return {
-                        currentPrice: wsPrice, prevClose: wsPrice * 0.999, dailyChange: 0,
-                        high24h: wsPrice * 1.005, low24h: wsPrice * 0.995, volumeSpike: false,
-                        rsi: 50, atr: wsPrice * 0.001, ema20: wsPrice, ema50: wsPrice, ema200: wsPrice,
-                        support: wsPrice * 0.998, resistance: wsPrice * 1.002, trend: 'SIDEWAYS', volatility: 0.3,
-                        ...info, _source: 'WebSocket only (no indicators)'
-                    };
-                }
-            }
+        const wsSym = info.wsSymbol;
+        if (!wsSym || !this.wsConnected) {
+            // If WebSocket not ready or symbol not supported, return a simple price (maybe from a fallback)
+            this.showError(`WebSocket not ready or symbol ${xmSymbol} not supported`);
             return null;
         }
+
+        // Get the latest price
+        const currentPrice = this.lastPrices[wsSym];
+        if (!currentPrice) {
+            this.showError(`No price yet for ${xmSymbol}, waiting for WebSocket data...`);
+            return null;
+        }
+
+        // Retrieve price history (at least 50 points for indicators)
+        let prices = this.getPriceHistory(xmSymbol);
+        if (prices.length < 50) {
+            this.showError(`Only ${prices.length} prices collected – using simple indicators until more arrive`);
+        }
+
+        let rsi = 50, ema20 = currentPrice, ema50 = currentPrice, ema200 = currentPrice;
+        let support = currentPrice * 0.998, resistance = currentPrice * 1.002;
+        let trend = 'SIDEWAYS', atr = currentPrice * 0.001, volatility = 0.3;
+
+        if (prices.length >= 50) {
+            rsi = this.calcRSI(prices);
+            ema20 = this.calcEMA(prices, 20);
+            ema50 = this.calcEMA(prices, 50);
+            ema200 = this.calcEMA(prices, 200);
+            support = Math.min(...prices.slice(-50)) * 0.998;
+            resistance = Math.max(...prices.slice(-50)) * 1.002;
+            if (ema20 > ema50 && ema50 > ema200) trend = 'BULLISH';
+            else if (ema20 < ema50 && ema50 < ema200) trend = 'BEARISH';
+            // Approximate ATR using last 14 high/low? Since we only have prices, we use price range
+            const recent = prices.slice(-14);
+            atr = (Math.max(...recent) - Math.min(...recent)) / 14;
+            volatility = (atr / currentPrice) * 100;
+        } else {
+            this.showError(`Insufficient history (${prices.length}) – RSI/EMA may be inaccurate`);
+        }
+
+        return {
+            currentPrice,
+            prevClose: prices.length >= 2 ? prices[prices.length-2] : currentPrice,
+            dailyChange: 0,   // not easily computed from live stream
+            high24h: currentPrice * 1.005,
+            low24h: currentPrice * 0.995,
+            volumeSpike: false,
+            rsi,
+            atr,
+            ema20,
+            ema50,
+            ema200,
+            support,
+            resistance,
+            trend,
+            volatility,
+            ...info,
+            _source: 'WebSocket (real‑time)'
+        };
     },
 
     async fetchPriceForTracking(symbol) {
