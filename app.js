@@ -1,6 +1,5 @@
 /**
- * OMNI-SIGNAL - Main Application (credit‑efficient auto tracking)
- * Supports all XM assets: XAUUSD, XAGUSD, OILCash, EURUSD, GBPUSD, BTCUSD, ETHUSD
+ * OMNI-SIGNAL - Main Application (credit‑efficient, supports all assets)
  */
 
 const elements = {
@@ -44,16 +43,17 @@ function loadSettings() {
         try {
             const config = JSON.parse(saved);
             if (document.getElementById('apiKey')) document.getElementById('apiKey').value = config.apiKey || '';
-            if (document.getElementById('twelveDataKey')) document.getElementById('twelveDataKey').value = config.twelveDataKey || '';
             if (document.getElementById('alphaKey')) document.getElementById('alphaKey').value = config.alphaKey || '';
+            if (document.getElementById('twelveDataKey')) document.getElementById('twelveDataKey').value = config.twelveDataKey || '';
             if (document.getElementById('balance')) document.getElementById('balance').value = config.balance || '10000';
             if (document.getElementById('riskPercent')) document.getElementById('riskPercent').value = config.riskPercent || '1.0';
             if (document.getElementById('modeSelect')) document.getElementById('modeSelect').value = config.mode || 'scalp';
             if (document.getElementById('autoTrackSelect')) document.getElementById('autoTrackSelect').value = config.autoTrack || 'on';
             currentMode = config.mode || 'scalp';
             autoTrackingEnabled = config.autoTrack !== 'off';
-            if (typeof MarketData !== 'undefined' && config.twelveDataKey) {
-                MarketData.setApiKey(config.twelveDataKey);
+            if (typeof MarketData !== 'undefined') {
+                if (config.alphaKey) MarketData.setAlphaKey(config.alphaKey);
+                if (config.twelveDataKey) MarketData.setTwelveKey(config.twelveDataKey);
             }
         } catch(e) { console.error('Load settings error:', e); }
     }
@@ -62,27 +62,25 @@ function loadSettings() {
 function saveSettings() {
     const config = {
         apiKey: document.getElementById('apiKey').value,
-        twelveDataKey: document.getElementById('twelveDataKey').value,
         alphaKey: document.getElementById('alphaKey').value,
+        twelveDataKey: document.getElementById('twelveDataKey').value,
         balance: document.getElementById('balance').value,
         riskPercent: document.getElementById('riskPercent').value,
         mode: document.getElementById('modeSelect').value,
         autoTrack: document.getElementById('autoTrackSelect').value
     };
     localStorage.setItem('omni_signal_config', JSON.stringify(config));
-    if (typeof MarketData !== 'undefined' && config.twelveDataKey) {
-        MarketData.setApiKey(config.twelveDataKey);
+    if (typeof MarketData !== 'undefined') {
+        if (config.alphaKey) MarketData.setAlphaKey(config.alphaKey);
+        if (config.twelveDataKey) MarketData.setTwelveKey(config.twelveDataKey);
     }
     currentMode = config.mode;
     autoTrackingEnabled = config.autoTrack !== 'off';
     updateAutoTrackStatus();
     closeDrawer();
     showToast('Settings saved!', 'success');
-    if (autoTrackingEnabled && currentTradeLevels) {
-        startAutoTracking();
-    } else {
-        stopAutoTracking();
-    }
+    if (autoTrackingEnabled && currentTradeLevels) startAutoTracking();
+    else stopAutoTracking();
 }
 
 function updateAutoTrackStatus() {
@@ -148,18 +146,15 @@ function calculateLotSize(entry, sl, balance, riskPercent) {
     return Math.max(0.01, Math.min(lot, 10));
 }
 
-// --- CREDIT-EFFICIENT AUTO TRACKING (uses fetchPriceForTracking) ---
+// Auto tracking (uses fetchPriceForTracking – no extra credits)
 function startAutoTracking() {
     if (autoTrackInterval) clearInterval(autoTrackInterval);
     if (!autoTrackingEnabled) return;
-    
     autoTrackInterval = setInterval(async () => {
         const openTrades = typeof getOpenTradesForTracking === 'function' ? getOpenTradesForTracking() : [];
         if (openTrades.length === 0) return;
-        
         const price = await MarketData.fetchPriceForTracking(currentSymbol);
         if (price === null) return;
-        
         for (const trade of openTrades) {
             if (trade.status !== 'OPEN') continue;
             let hitTP = false;
@@ -168,12 +163,10 @@ function startAutoTracking() {
             if (hitTP) {
                 if (typeof recordFeedback === 'function') recordFeedback(trade.id, 'WIN', 'Auto: TP hit');
                 showToast(`${trade.symbol} - TP HIT! WIN.`, 'success');
-            }
-            else if (trade.bias === 'BUY' && price <= trade.sl) {
+            } else if (trade.bias === 'BUY' && price <= trade.sl) {
                 if (typeof recordFeedback === 'function') recordFeedback(trade.id, 'LOSS', 'Auto: SL hit');
                 showToast(`${trade.symbol} - SL HIT! LOSS.`, 'error');
-            }
-            else if (trade.bias === 'SELL' && price >= trade.sl) {
+            } else if (trade.bias === 'SELL' && price >= trade.sl) {
                 if (typeof recordFeedback === 'function') recordFeedback(trade.id, 'LOSS', 'Auto: SL hit');
                 showToast(`${trade.symbol} - SL HIT! LOSS.`, 'error');
             }
@@ -187,7 +180,7 @@ function stopAutoTracking() {
 
 async function getGeminiExplanation(apiKey) {
     if (!apiKey) return null;
-    const prompt = `Explain this trade signal in 10-15 words: ${currentSymbol} price ${currentData?.currentPrice}. RSI ${currentData?.rsi?.toFixed(1)}. Signal: ${currentSignal?.bias} with ${currentSignal?.confidence}% confidence. ${currentSignal?.conditionsDetected || ''}`;
+    const prompt = `Explain this trade signal in 10-15 words: ${currentSymbol} price ${currentData?.currentPrice}. RSI ${currentData?.rsi?.toFixed(1)}. Signal: ${currentSignal?.bias} with ${currentSignal?.confidence}% confidence.`;
     try {
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`, {
             method: 'POST',
@@ -202,14 +195,7 @@ async function getGeminiExplanation(apiKey) {
 async function geminiFinalCheck(apiKey, data, signal) {
     if (!apiKey) return { approved: true };
     if (signal.confidence < 65 || signal.confidence > 75) return { approved: true };
-    const prompt = `You are a risk officer. Analyze this trade setup:
-Symbol: ${data.symbol}
-Price: ${data.currentPrice}
-RSI: ${data.rsi.toFixed(1)}
-Support: ${data.support}, Resistance: ${data.resistance}
-Proposed signal: ${signal.bias} with confidence ${signal.confidence}%
-
-Answer ONLY with "APPROVE" or "REJECT". If REJECT, give one short reason.`;
+    const prompt = `You are a risk officer. Analyze: ${data.symbol} price ${data.currentPrice}, RSI ${data.rsi.toFixed(1)}. Signal: ${signal.bias} with ${signal.confidence}%. Answer ONLY with "APPROVE" or "REJECT". If REJECT, give short reason.`;
     try {
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`, {
             method: 'POST',
@@ -226,28 +212,25 @@ Answer ONLY with "APPROVE" or "REJECT". If REJECT, give one short reason.`;
 async function analyze() {
     const apiKey = document.getElementById('apiKey').value;
     if (!apiKey) { openDrawer(); showToast('Please enter your Gemini API key', 'error'); return; }
-    
+    const alphaKey = document.getElementById('alphaKey').value;
+    if (!alphaKey) { openDrawer(); showToast('Please enter your Alpha Vantage API key', 'error'); return; }
+
     showLoading(true);
     elements.logicText.textContent = "Fetching market data...";
-    
     try {
         currentSymbol = elements.symbolSelect.value;
         currentData = await MarketData.fetch(currentSymbol);
-        if (!currentData) throw new Error('All APIs failed. Check connection.');
-        
-        elements.currentPrice.textContent = currentData.currentPrice.toFixed(currentData.digits || 2);
+        if (!currentData) throw new Error('No data from any source');
+        elements.currentPrice.textContent = currentData.currentPrice.toFixed(currentData.digits);
         elements.updateTime.textContent = `Updated: ${new Date().toLocaleTimeString()}`;
-        
+
         let dxyData = null;
-        try {
-            dxyData = await MarketData.fetchDXY();
-        } catch(e) { console.warn('DXY fetch failed'); }
-        
+        try { dxyData = await MarketData.fetchDXY(); } catch(e) {}
+
         const balance = parseFloat(document.getElementById('balance').value);
         const riskPercent = parseFloat(document.getElementById('riskPercent').value);
-        
         currentSignal = await StrategyEngine.analyze(currentData, currentMode, { dxyData });
-        
+
         const aiCheck = await geminiFinalCheck(apiKey, currentData, currentSignal);
         if (!aiCheck.approved) {
             currentSignal.bias = 'WAIT';
@@ -255,41 +238,37 @@ async function analyze() {
             currentSignal.primaryStrategy = `AI Rejected: ${aiCheck.reason}`;
             showToast(`AI filter rejected: ${aiCheck.reason}`, 'warning');
         }
-        
+
         elements.signalBias.textContent = currentSignal.bias;
         elements.signalBias.className = `text-7xl font-black italic ${
             currentSignal.bias === 'BUY' ? 'signal-buy' : 
             currentSignal.bias === 'SELL' ? 'signal-sell' : 'signal-wait'
         }`;
         elements.confidenceText.textContent = `${currentSignal.confidence}% confidence`;
-        
+
         let tradeLevels = null;
         if (currentSignal.bias !== 'WAIT') {
             tradeLevels = RiskManager.calculateTradeLevels(currentData, currentSignal, currentMode, { balance, riskPercent });
         }
-        
+
         if (currentSignal.bias !== 'WAIT' && tradeLevels && tradeLevels.entry && tradeLevels.stopLoss && tradeLevels.takeProfit1 && tradeLevels.takeProfit2) {
             currentTradeLevels = tradeLevels;
             elements.entryPrice.textContent = tradeLevels.entry;
             elements.stopLoss.textContent = tradeLevels.stopLoss;
             elements.takeProfit.textContent = `${tradeLevels.takeProfit1} / ${tradeLevels.takeProfit2}`;
-            
             const lotSize = calculateLotSize(tradeLevels.entry, tradeLevels.stopLoss, balance, riskPercent);
             elements.lotSize.textContent = lotSize.toFixed(2);
-            
             const risk = Math.abs(tradeLevels.entry - tradeLevels.stopLoss);
             const reward = Math.abs(tradeLevels.takeProfit2 - tradeLevels.entry);
             const rr = risk > 0 ? (reward / risk).toFixed(1) : 0;
             elements.rrValue.textContent = `1:${rr}`;
             elements.tradeType.textContent = currentMode === 'scalp' ? 'SCALP' : 'DAY';
             elements.poiBox.classList.add('hidden');
-            
             if (typeof addOpenTrade === 'function') {
-                const adaptedTrade = { ...tradeLevels, takeProfit: tradeLevels.takeProfit2 };
-                addOpenTrade(currentSignal, currentData, adaptedTrade);
+                const adapted = { ...tradeLevels, takeProfit: tradeLevels.takeProfit2 };
+                addOpenTrade(currentSignal, currentData, adapted);
             }
             if (autoTrackingEnabled) startAutoTracking();
-            
             const geminiText = await getGeminiExplanation(apiKey);
             const reasoning = currentSignal.reasons?.join(' ') || currentSignal.conditionsDetected || currentSignal.primaryStrategy;
             elements.logicText.innerHTML = `<span class="text-cyan-400">🎯 ${currentSignal.bias}</span><br>${geminiText || reasoning}`;
@@ -300,7 +279,7 @@ async function analyze() {
             elements.lotSize.textContent = '--';
             elements.rrValue.textContent = '0:0';
             const poi = currentData.currentPrice;
-            elements.poiLevel.textContent = poi.toFixed(currentData.digits || 2);
+            elements.poiLevel.textContent = poi.toFixed(currentData.digits);
             elements.poiLogic.textContent = currentSignal.reasons?.[0] || 'Insufficient confluence. Wait for better setup.';
             elements.poiBox.classList.remove('hidden');
             elements.logicText.innerHTML = `<span class="text-amber-400">⏸️ WAIT MODE</span><br>${currentSignal.primaryStrategy || 'No clear setup'}`;
@@ -322,13 +301,12 @@ function init() {
     elements.saveSettings.addEventListener('click', saveSettings);
     elements.themeToggle.addEventListener('click', toggleTheme);
     elements.symbolSelect.addEventListener('change', analyze);
-    
     setTimeout(() => {
         if (typeof renderOpenTrades === 'function') renderOpenTrades();
         if (typeof renderFeedbackHistory === 'function') renderFeedbackHistory();
         if (typeof updateStrategyPerformance === 'function') updateStrategyPerformance();
     }, 100);
-    showToast('App ready. Advanced strategy engine active.', 'info');
+    showToast('App ready. Advanced strategy active.', 'info');
 }
 
 init();
