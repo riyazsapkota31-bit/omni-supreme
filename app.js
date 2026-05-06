@@ -1,10 +1,10 @@
 /**
- * OMNI-SIGNAL - Main Application
- * Uses advanced StrategyEngine (5 signals, market filters, DXY filter)
- * Upgrades: 6 (partial profit display), 9 (AI final check for borderline signals)
+ * OMNI-SIGNAL - Main Application (with credit‑efficient auto tracking)
+ * All advanced features: StrategyEngine, partial profits, AI final check, DXY filter.
+ * Auto tracking uses cached market data – never makes extra API calls.
  */
 
-// Global variable for Alpha Vantage
+// Global variable for Alpha Vantage (kept for compatibility)
 var alphaVantageKey = null;
 
 // DOM Elements
@@ -51,6 +51,7 @@ function loadSettings() {
         try {
             const config = JSON.parse(saved);
             document.getElementById('apiKey').value = config.apiKey || '';
+            document.getElementById('twelveDataKey').value = config.twelveDataKey || '';
             document.getElementById('alphaKey').value = config.alphaKey || '';
             document.getElementById('balance').value = config.balance || '10000';
             document.getElementById('riskPercent').value = config.riskPercent || '1.0';
@@ -59,8 +60,8 @@ function loadSettings() {
             currentMode = config.mode || 'scalp';
             autoTrackingEnabled = config.autoTrack !== 'off';
             
-            if (typeof MarketData !== 'undefined' && config.alphaKey) {
-                MarketData.setAlphaKey(config.alphaKey);
+            if (typeof MarketData !== 'undefined' && config.twelveDataKey) {
+                MarketData.setApiKey(config.twelveDataKey);
             }
         } catch(e) { console.error('Load settings error:', e); }
     }
@@ -69,6 +70,7 @@ function loadSettings() {
 function saveSettings() {
     const config = {
         apiKey: document.getElementById('apiKey').value,
+        twelveDataKey: document.getElementById('twelveDataKey').value,
         alphaKey: document.getElementById('alphaKey').value,
         balance: document.getElementById('balance').value,
         riskPercent: document.getElementById('riskPercent').value,
@@ -77,8 +79,8 @@ function saveSettings() {
     };
     localStorage.setItem('omni_signal_config', JSON.stringify(config));
     
-    if (typeof MarketData !== 'undefined' && config.alphaKey) {
-        MarketData.setAlphaKey(config.alphaKey);
+    if (typeof MarketData !== 'undefined' && config.twelveDataKey) {
+        MarketData.setApiKey(config.twelveDataKey);
     }
     
     currentMode = config.mode;
@@ -148,7 +150,7 @@ function toggleTheme() {
     }
 }
 
-// Lot size calculation
+// Lot size calculation (used after signal)
 function calculateLotSize(entry, sl, balance, riskPercent) {
     if (!entry || !sl) return 0.01;
     const riskAmount = balance * (riskPercent / 100);
@@ -159,7 +161,7 @@ function calculateLotSize(entry, sl, balance, riskPercent) {
     return Math.max(0.01, Math.min(lot, 10));
 }
 
-// Auto Price Tracking
+// Auto Price Tracking – optimised to use cache (no extra API calls)
 function startAutoTracking() {
     if (autoTrackInterval) clearInterval(autoTrackInterval);
     if (!autoTrackingEnabled) return;
@@ -169,12 +171,13 @@ function startAutoTracking() {
         if (openTrades.length === 0) return;
         
         try {
+            // This fetch() returns cached data if fresh (no API call)
             const currentPriceData = await MarketData.fetch(currentSymbol);
+            if (!currentPriceData) return;
             const price = currentPriceData.currentPrice;
             
             for (const trade of openTrades) {
                 if (trade.status !== 'OPEN') continue;
-                // check both TP levels – for simplicity, we treat either TP as a win
                 let hitTP = false;
                 if (trade.bias === 'BUY' && (price >= trade.tp1 || price >= trade.tp2)) hitTP = true;
                 if (trade.bias === 'SELL' && (price <= trade.tp1 || price <= trade.tp2)) hitTP = true;
@@ -214,11 +217,10 @@ async function getGeminiExplanation(apiKey) {
     } catch(e) { return null; }
 }
 
-// Upgrade 9: AI final check for borderline signals (confidence 65-75)
+// AI final check for borderline signals
 async function geminiFinalCheck(apiKey, data, signal) {
     if (!apiKey) return { approved: true };
     if (signal.confidence < 65 || signal.confidence > 75) return { approved: true };
-    
     const prompt = `You are a risk officer. Analyze this trade setup:
 Symbol: ${data.symbol}
 Price: ${data.currentPrice}
@@ -227,7 +229,6 @@ Support: ${data.support}, Resistance: ${data.resistance}
 Proposed signal: ${signal.bias} with confidence ${signal.confidence}%
 
 Answer ONLY with "APPROVE" or "REJECT". If REJECT, give one short reason.`;
-    
     try {
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`, {
             method: 'POST',
@@ -236,14 +237,12 @@ Answer ONLY with "APPROVE" or "REJECT". If REJECT, give one short reason.`;
         });
         const result = await response.json();
         const answer = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        if (answer.includes('REJECT')) {
-            return { approved: false, reason: answer };
-        }
+        if (answer.includes('REJECT')) return { approved: false, reason: answer };
         return { approved: true };
     } catch(e) { return { approved: true }; }
 }
 
-// Main Analysis – uses advanced StrategyEngine
+// Main Analysis
 async function analyze() {
     const apiKey = document.getElementById('apiKey').value;
     if (!apiKey) { openDrawer(); showToast('Please enter your Gemini API key', 'error'); return; }
@@ -262,14 +261,13 @@ async function analyze() {
         let dxyData = null;
         try {
             dxyData = await MarketData.fetchDXY();
-        } catch(e) { console.warn('DXY fetch failed, continuing without filter'); }
+        } catch(e) { console.warn('DXY fetch failed'); }
         
         const balance = parseFloat(document.getElementById('balance').value);
         const riskPercent = parseFloat(document.getElementById('riskPercent').value);
         
         currentSignal = await StrategyEngine.analyze(currentData, currentMode, { dxyData });
         
-        // Upgrade 9: AI final check
         const aiCheck = await geminiFinalCheck(apiKey, currentData, currentSignal);
         if (!aiCheck.approved) {
             currentSignal.bias = 'WAIT';
@@ -285,7 +283,7 @@ async function analyze() {
         }`;
         elements.confidenceText.textContent = `${currentSignal.confidence}% confidence`;
         
-        // Calculate trade levels using RiskManager
+        // Use RiskManager for trade levels (includes partial profits)
         let tradeLevels = null;
         if (currentSignal.bias !== 'WAIT') {
             tradeLevels = RiskManager.calculateTradeLevels(currentData, currentSignal, currentMode, { balance, riskPercent });
@@ -295,7 +293,6 @@ async function analyze() {
             currentTradeLevels = tradeLevels;
             elements.entryPrice.textContent = tradeLevels.entry;
             elements.stopLoss.textContent = tradeLevels.stopLoss;
-            // Upgrade 6: display both TPs
             elements.takeProfit.textContent = `${tradeLevels.takeProfit1} / ${tradeLevels.takeProfit2}`;
             
             const lotSize = calculateLotSize(tradeLevels.entry, tradeLevels.stopLoss, balance, riskPercent);
@@ -309,7 +306,6 @@ async function analyze() {
             elements.poiBox.classList.add('hidden');
             
             if (typeof addOpenTrade === 'function') {
-                // adapt to pass both TP levels
                 const adaptedTrade = { ...tradeLevels, takeProfit: tradeLevels.takeProfit2 };
                 addOpenTrade(currentSignal, currentData, adaptedTrade);
             }
