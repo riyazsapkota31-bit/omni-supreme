@@ -1,18 +1,17 @@
 /**
- * MARKET DATA FETCHER – Twelve Data WebSocket + REST with cache
- * Displays error on screen if API key is missing.
+ * MARKET DATA FETCHER – Twelve Data REST API (uses your API key from settings)
+ * No WebSocket, no CORS issues (Twelve Data supports CORS).
+ * Works for: XAUUSD, XAGUSD, OILCash, EURUSD, GBPUSD, BTCUSD, ETHUSD
  */
 
 const MarketData = {
-    ws: null,
-    wsConnected: false,
-    lastPrices: {},
-    restCache: {},
-    apiKey: null,
+    getApiKey() {
+        return localStorage.getItem('twelve_data_key');
+    },
 
     assetInfo: {
-        'XAUUSD': { class: 'commodities', spread: 0.20, multiplier: 100, name: 'Gold', digits: 2, realtime: true },
-        'XAGUSD': { class: 'commodities', spread: 0.03, multiplier: 100, name: 'Silver', digits: 3, realtime: true },
+        'XAUUSD': { class: 'commodities', spread: 0.20, multiplier: 100, name: 'Gold', digits: 2 },
+        'XAGUSD': { class: 'commodities', spread: 0.03, multiplier: 100, name: 'Silver', digits: 3 },
         'OILCash': { class: 'commodities', spread: 0.03, multiplier: 100, name: 'WTI Oil', digits: 2 },
         'EURUSD': { class: 'forex', spread: 0.0001, multiplier: 10000, name: 'EUR/USD', digits: 5 },
         'GBPUSD': { class: 'forex', spread: 0.0001, multiplier: 10000, name: 'GBP/USD', digits: 5 },
@@ -20,81 +19,34 @@ const MarketData = {
         'ETHUSD': { class: 'crypto', spread: 0.50, multiplier: 10, name: 'Ethereum', digits: 0 }
     },
 
-    setApiKey(key) { this.apiKey = key; localStorage.setItem('twelve_data_key', key); },
-    getApiKey() { if (!this.apiKey) this.apiKey = localStorage.getItem('twelve_data_key'); return this.apiKey; },
-
     showError(msg) {
-        let errDiv = document.getElementById('apiKeyError');
+        let errDiv = document.getElementById('dataError');
         if (!errDiv) {
             errDiv = document.createElement('div');
-            errDiv.id = 'apiKeyError';
-            errDiv.style.cssText = 'position:fixed; bottom:10px; left:10px; right:10px; background:#ff4466; color:white; padding:10px; border-radius:12px; font-size:11px; z-index:9999; text-align:center;';
+            errDiv.id = 'dataError';
+            errDiv.style.cssText = 'position:fixed; bottom:10px; left:10px; right:10px; background:#ef4444; color:white; padding:10px; border-radius:12px; font-size:12px; z-index:9999; text-align:center;';
             document.body.appendChild(errDiv);
         }
         errDiv.innerHTML = msg;
         errDiv.style.display = 'block';
-        setTimeout(() => { if(errDiv) errDiv.style.display = 'none'; }, 10000);
+        setTimeout(() => { if(errDiv) errDiv.style.display = 'none'; }, 8000);
     },
 
-    initWebSocket(apiKey) {
-        if (!apiKey) {
-            console.warn('No API key – WebSocket disabled');
-            return;
-        }
-        if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return;
-        const wsUrl = `wss://ws.twelvedata.com/v1/quotes?apikey=${apiKey}`;
-        this.ws = new WebSocket(wsUrl);
-        this.ws.onopen = () => {
-            console.log('WebSocket connected');
-            this.wsConnected = true;
-            this.ws.send(JSON.stringify({ action: 'subscribe', symbols: ['XAUUSD', 'XAGUSD'] }));
-        };
-        this.ws.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data);
-                if (data.symbol && data.price) {
-                    this.lastPrices[data.symbol] = { price: data.price, timestamp: Date.now() };
-                }
-            } catch(e) {}
-        };
-        this.ws.onerror = (err) => console.warn('WebSocket error', err);
-        this.ws.onclose = () => {
-            this.wsConnected = false;
-            setTimeout(() => this.initWebSocket(apiKey), 5000);
-        };
-    },
-
-    async getRealtimePrice(symbol) {
-        if (!this.wsConnected) return null;
-        const start = Date.now();
-        while (!this.lastPrices[symbol] && Date.now() - start < 3000) {
-            await new Promise(r => setTimeout(r, 100));
-        }
-        const cached = this.lastPrices[symbol];
-        if (cached && (Date.now() - cached.timestamp) < 5000) return cached.price;
-        return null;
-    },
-
-    async fetchFullData(symbol) {
-        const apiKey = this.getApiKey();
-        if (!apiKey) {
-            this.showError('⚠️ Twelve Data API key missing. Please enter your API key in settings.');
-            throw new Error('No API key');
-        }
-        const cached = this.restCache[symbol];
-        if (cached && (Date.now() - cached.timestamp) < 60000) {
-            return cached.data;
-        }
+    async fetchFromTwelveData(symbol, apiKey) {
         const url = `https://api.twelvedata.com/time_series?symbol=${symbol}&interval=1h&outputsize=100&apikey=${apiKey}`;
-        const resp = await fetch(url);
-        const data = await resp.json();
-        if (!data.values || data.values.length === 0) throw new Error('No data from Twelve Data');
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        if (data.code === 401 || data.message === 'Invalid API key') {
+            throw new Error('Invalid API key');
+        }
+        if (!data.values || data.values.length === 0) throw new Error('No data');
         const vals = data.values;
         const closes = vals.map(v => parseFloat(v.close));
         const highs = vals.map(v => parseFloat(v.high));
         const lows = vals.map(v => parseFloat(v.low));
         const current = parseFloat(vals[0].close);
-        const result = {
+        return {
             currentPrice: current,
             prevClose: parseFloat(vals[1]?.close || current),
             dailyChange: ((current - parseFloat(vals[23]?.close || current)) / current) * 100,
@@ -110,26 +62,8 @@ const MarketData = {
             resistance: Math.max(...highs.slice(0,50)),
             trend: this.determineTrend(closes),
             volatility: (this.calcATR(highs, lows, closes, 14) / current) * 100,
-            _source: 'Twelve Data REST'
+            _source: 'Twelve Data (REST)'
         };
-        this.restCache[symbol] = { data: result, timestamp: Date.now() };
-        return result;
-    },
-
-    async fetchPriceOnly(symbol) {
-        const info = this.assetInfo[symbol];
-        if (!info) return null;
-        if (info.realtime && this.apiKey) {
-            if (!this.wsConnected) this.initWebSocket(this.apiKey);
-            const realPrice = await this.getRealtimePrice(symbol);
-            if (realPrice !== null) return realPrice;
-        }
-        const cachedFull = this.restCache[symbol];
-        if (cachedFull && (Date.now() - cachedFull.timestamp) < 60000) {
-            return cachedFull.data.currentPrice;
-        }
-        if (cachedFull) return cachedFull.data.currentPrice;
-        return null;
     },
 
     async fetch(xmSymbol) {
@@ -138,36 +72,30 @@ const MarketData = {
 
         const apiKey = this.getApiKey();
         if (!apiKey) {
-            this.showError('⚠️ Twelve Data API key missing. Please enter your API key in settings.');
+            this.showError('⚠️ Twelve Data API key missing. Please enter your key in Settings.');
             return null;
         }
 
-        if (info.realtime) {
-            if (!this.wsConnected) this.initWebSocket(apiKey);
-            const realPrice = await this.getRealtimePrice(xmSymbol);
-            let fullData = this.restCache[xmSymbol + '_full']?.data;
-            if (!fullData || Date.now() - (this.restCache[xmSymbol + '_full']?.timestamp || 0) > 60000) {
-                fullData = await this.fetchFullData(xmSymbol);
-                this.restCache[xmSymbol + '_full'] = { data: fullData, timestamp: Date.now() };
-            }
-            if (fullData) {
-                const result = { ...fullData, ...info };
-                result.currentPrice = realPrice !== null ? realPrice : fullData.currentPrice;
-                result._source = realPrice !== null ? 'WebSocket (price) + REST indicators' : 'REST (WebSocket failed)';
-                return result;
-            }
+        try {
+            const data = await this.fetchFromTwelveData(xmSymbol, apiKey);
+            return { ...data, ...info };
+        } catch (err) {
+            console.error(err);
+            this.showError(`Twelve Data error: ${err.message}. Check your API key.`);
+            return null;
         }
-        return await this.fetchFullData(xmSymbol);
     },
 
     async fetchPriceForTracking(symbol) {
-        return await this.fetchPriceOnly(symbol);
+        const data = await this.fetch(symbol);
+        return data ? data.currentPrice : null;
     },
 
     async fetchDXY() {
         return { dxyPrice: 0, dxyTrend: 'NEUTRAL', dxyStrength: 'NEUTRAL' };
     },
 
+    // Technical indicators (same as before)
     calcRSI(prices, period) {
         if (prices.length < period + 1) return 50;
         let gains = 0, losses = 0;
