@@ -29,12 +29,9 @@
             --text-primary: #1a202c;
             --text-secondary: #4a5568;
         }
-        body { background: var(--bg-primary); color: var(--text-primary); font-family: 'Inter', sans-serif; overflow-x: hidden; transition: all 0.3s ease; padding: 20px; }
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: var(--bg-secondary); }
-        ::-webkit-scrollbar-thumb { background: var(--accent-primary); border-radius: 10px; }
+        body { background: var(--bg-primary); color: var(--text-primary); font-family: 'Inter', sans-serif; padding: 20px; }
         .card { background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 24px; padding: 20px; margin-bottom: 16px; }
-        .btn { background: linear-gradient(135deg, #6366f1, #4338ca); padding: 14px; border-radius: 16px; font-weight: bold; width: 100%; border: none; color: white; cursor: pointer; transition: opacity 0.2s; }
+        .btn { background: linear-gradient(135deg, #6366f1, #4338ca); padding: 14px; border-radius: 16px; font-weight: bold; width: 100%; border: none; color: white; cursor: pointer; }
         .btn:disabled { opacity: 0.5; cursor: not-allowed; }
         .signal-buy { color: #00ff88; text-shadow: 0 0 20px rgba(0,255,136,0.3); }
         .signal-sell { color: #ff4466; text-shadow: 0 0 20px rgba(255,68,102,0.3); }
@@ -42,8 +39,6 @@
         .input-dark { background: var(--bg-secondary); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 12px; color: var(--text-primary); width: 100%; outline: none; }
         .input-dark:focus { border-color: var(--accent-primary); }
         .badge { background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.2); border-radius: 12px; padding: 6px 12px; font-size: 11px; }
-        @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.5;} }
-        .loading { animation: pulse 1.5s ease-in-out infinite; }
         .overlay { position: fixed; inset: 0; background: rgba(5,8,15,0.95); backdrop-filter: blur(8px); z-index: 1000; display: none; justify-content: center; align-items: center; flex-direction: column; }
         .drawer { position: fixed; top: 0; right: -100%; width: 320px; height: 100%; background: #0a0f1a; transition: 0.3s; z-index: 1001; border-left: 1px solid rgba(255,255,255,0.1); padding: 24px; overflow-y: auto; }
         .drawer.open { right: 0; }
@@ -59,7 +54,7 @@
 
 <div id="loadingOverlay" class="overlay">
     <i class="fa-solid fa-microchip fa-4x text-indigo-500 mb-4"></i>
-    <p class="text-indigo-400 font-bold loading">ANALYZING MARKET...</p>
+    <p class="text-indigo-400 font-bold">ANALYZING MARKET...</p>
 </div>
 
 <div id="settingsDrawer" class="drawer">
@@ -74,13 +69,14 @@
             <p class="text-[8px] text-slate-500 mt-1">Get free from <a href="https://aistudio.google.com" target="_blank" class="text-indigo-400">aistudio.google.com</a></p>
         </div>
         <div>
-            <label class="text-[10px] font-bold text-slate-400">📡 TWELVE DATA API KEY (required for real‑time Gold/Silver)</label>
-            <input type="password" id="twelveDataKey" class="input-dark text-sm mt-1" placeholder="Paste your Twelve Data API key">
-            <p class="text-[8px] text-slate-500 mt-1">Get free from <a href="https://twelvedata.com" target="_blank" class="text-indigo-400">twelvedata.com</a> – also used for all market data</p>
+            <label class="text-[10px] font-bold text-slate-400">📊 ALPHA VANTAGE API KEY (required)</label>
+            <input type="password" id="alphaKey" class="input-dark text-sm mt-1" placeholder="Paste your Alpha Vantage key">
+            <p class="text-[8px] text-slate-500 mt-1">Get free from <a href="https://alphavantage.co/support/#api-key" target="_blank" class="text-indigo-400">alphavantage.co</a></p>
         </div>
         <div>
-            <label class="text-[10px] font-bold text-slate-400">📊 ALPHA VANTAGE KEY (optional – not used)</label>
-            <input type="password" id="alphaKey" class="input-dark text-sm mt-1" placeholder="Not needed, kept for compatibility">
+            <label class="text-[10px] font-bold text-slate-400">📡 TWELVE DATA API KEY (optional – for real‑time Gold/Silver/Oil)</label>
+            <input type="password" id="twelveDataKey" class="input-dark text-sm mt-1" placeholder="Paste your Twelve Data key (WebSocket)">
+            <p class="text-[8px] text-slate-500 mt-1">Get free from <a href="https://twelvedata.com" target="_blank" class="text-indigo-400">twelvedata.com</a> – adds real‑time WebSocket</p>
         </div>
         <div class="grid grid-cols-2 gap-3">
             <div><label class="text-[10px] font-bold text-slate-400">💰 BALANCE ($)</label><input type="number" id="balance" class="input-dark mt-1" value="10000"></div>
@@ -123,9 +119,9 @@
         <label class="text-[10px] font-bold text-slate-400">📈 SYMBOL</label>
         <div class="flex gap-2 mt-2">
             <select id="symbolSelect" class="input-dark flex-1">
-                <optgroup label="Commodities (Real‑time via WebSocket)">
-                    <option value="XAUUSD">🪙 GOLD (XAUUSD) – Real‑time</option>
-                    <option value="XAGUSD">🥈 SILVER (XAGUSD) – Real‑time</option>
+                <optgroup label="Commodities">
+                    <option value="XAUUSD">🪙 GOLD (XAUUSD)</option>
+                    <option value="XAGUSD">🥈 SILVER (XAGUSD)</option>
                     <option value="OILCash">🛢️ WTI OIL (OILCash)</option>
                 </optgroup>
                 <optgroup label="Forex">
