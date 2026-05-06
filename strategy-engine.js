@@ -1,396 +1,549 @@
 /**
- * STRATEGY ENGINE - Council of 8
- * Aggregates: SMC, ICT, VSA, Price Action, Wyckoff, Fibonacci, Mean Reversion, Elliott Wave
- * Automatically selects best strategy for current market conditions
+ * STRATEGY ENGINE - 15 Strategies + Intelligent Auto-Selector
+ * Automatically picks the best strategy for current market conditions
  */
 
 const StrategyEngine = {
     
-    // Main analysis function
-    async analyze(marketData, mode, config) {
-        const strategies = this.evaluateAllStrategies(marketData, mode);
+    // List of all available strategies
+    strategies: [
+        { name: 'SMC', fn: 'smcStrategy', conditions: ['trending', 'high_volume'] },
+        { name: 'ICT', fn: 'ictStrategy', conditions: ['liquidity_sweep', 'fvg'] },
+        { name: 'VSA', fn: 'vsaStrategy', conditions: ['volume_spike', 'support_resistance'] },
+        { name: 'Price Action', fn: 'priceActionStrategy', conditions: ['trending', 'clear_levels'] },
+        { name: 'Wyckoff', fn: 'wyckoffStrategy', conditions: ['accumulation', 'distribution'] },
+        { name: 'Fibonacci', fn: 'fibonacciStrategy', conditions: ['retracement', 'extension'] },
+        { name: 'Mean Reversion', fn: 'meanReversionStrategy', conditions: ['oversold', 'overbought'] },
+        { name: 'Elliott Wave', fn: 'elliottWaveStrategy', conditions: ['impulsive', 'corrective'] },
+        { name: 'RSI Divergence', fn: 'rsiDivergenceStrategy', conditions: ['divergence', 'reversal'] },
+        { name: 'MACD Crossover', fn: 'macdStrategy', conditions: ['momentum', 'trending'] },
+        { name: 'Bollinger Bands', fn: 'bollingerStrategy', conditions: ['volatility', 'mean_reversion'] },
+        { name: 'Support/Resistance', fn: 'supportResistanceStrategy', conditions: ['clear_levels', 'range'] },
+        { name: 'Breakout', fn: 'breakoutStrategy', conditions: ['consolidation', 'high_volume'] },
+        { name: 'Moving Average Ribbon', fn: 'maRibbonStrategy', conditions: ['strong_trend'] },
+        { name: 'Ichimoku', fn: 'ichimokuStrategy', conditions: ['trending', 'momentum'] }
+    ],
+    
+    // Detect current market conditions
+    detectMarketConditions(data) {
+        const conditions = [];
         
-        // Find highest confidence strategy
-        const bestStrategy = strategies.reduce((best, current) => 
-            current.confidence > best.confidence ? current : best
-        , strategies[0]);
+        // Trend detection
+        if (data.trend === 'BULLISH') conditions.push('trending');
+        if (data.trend === 'BEARISH') conditions.push('trending');
+        if (Math.abs(data.ema20 - data.ema50) / data.currentPrice > 0.002) conditions.push('strong_trend');
         
-        // Calculate consensus from all 8 strategies
-        const consensus = this.calculateConsensus(strategies);
+        // Volatility
+        if (data.volatility > 1) conditions.push('high_volatility');
+        if (data.volatility < 0.3) conditions.push('low_volatility');
         
-        // Apply DXY filter if available
-        let dxyFilter = { approved: true, reason: '' };
-        if (config.dxyData) {
-            dxyFilter = this.applyDXYFilter(marketData, config.dxyData, bestStrategy);
+        // Volume
+        if (data.volumeSpike) conditions.push('volume_spike', 'high_volume');
+        
+        // RSI conditions
+        if (data.rsi < 30) conditions.push('oversold', 'mean_reversion');
+        if (data.rsi > 70) conditions.push('overbought', 'mean_reversion');
+        if (data.rsi < 50 && data.trend === 'BULLISH') conditions.push('momentum_up');
+        
+        // Price position
+        if (data.currentPrice <= data.support * 1.002) conditions.push('support', 'reversal');
+        if (data.currentPrice >= data.resistance * 0.998) conditions.push('resistance', 'reversal');
+        
+        // Market structure
+        const rangeSize = (data.resistance - data.support) / data.currentPrice;
+        if (rangeSize < 0.005) conditions.push('consolidation', 'range');
+        if (rangeSize > 0.02) conditions.push('clear_levels', 'volatile_range');
+        
+        // Liquidity detection
+        if (data.currentPrice > data.resistance * 0.995) conditions.push('liquidity_sweep_high');
+        if (data.currentPrice < data.support * 1.005) conditions.push('liquidity_sweep_low');
+        if (data.currentPrice > data.resistance || data.currentPrice < data.support) conditions.push('breakout');
+        
+        // FVG detection (price gap)
+        const gapSize = (data.resistance - data.support) / data.support;
+        if (gapSize > 0.003 && gapSize < 0.015) conditions.push('fvg');
+        
+        // Divergence detection
+        const rsiTrend = data.rsi > data.rsi ? 'up' : 'down';
+        const priceTrend = data.currentPrice > data.prevClose ? 'up' : 'down';
+        if (rsiTrend !== priceTrend) conditions.push('divergence');
+        
+        // Accumulation/distribution
+        if (data.rsi < 40 && data.volumeSpike) conditions.push('accumulation');
+        if (data.rsi > 60 && data.volumeSpike) conditions.push('distribution');
+        if (data.currentPrice > data.ema200 && data.ema20 > data.ema50) conditions.push('impulsive');
+        if (data.currentPrice < data.ema200 && data.ema20 < data.ema50) conditions.push('corrective');
+        
+        // Retracement
+        const range = data.high24h - data.low24h;
+        const retracement = (data.currentPrice - data.low24h) / range;
+        if (retracement > 0.382 && retracement < 0.618) conditions.push('retracement');
+        if (retracement > 0.618) conditions.push('extension');
+        
+        return conditions;
+    },
+    
+    // Score each strategy based on market conditions
+    scoreStrategies(conditions, marketData, mode) {
+        const scores = [];
+        
+        for (const strategy of this.strategies) {
+            let score = 50; // Base score
+            
+            // Match conditions
+            for (const cond of strategy.conditions) {
+                if (conditions.includes(cond)) score += 15;
+            }
+            
+            // Mode-specific adjustments
+            if (mode === 'scalp') {
+                if (strategy.name === 'Price Action') score += 10;
+                if (strategy.name === 'Support/Resistance') score += 10;
+                if (strategy.name === 'Breakout') score += 15;
+                if (strategy.name === 'SMC') score += 10;
+            } else {
+                if (strategy.name === 'Ichimoku') score += 15;
+                if (strategy.name === 'Moving Average Ribbon') score += 15;
+                if (strategy.name === 'Elliott Wave') score += 10;
+                if (strategy.name === 'Fibonacci') score += 10;
+            }
+            
+            // Market-specific boosts
+            if (marketData.assetClass === 'crypto' && strategy.name === 'RSI Divergence') score += 10;
+            if (marketData.assetClass === 'forex' && strategy.name === 'ICT') score += 10;
+            if (marketData.assetClass === 'commodities' && strategy.name === 'Wyckoff') score += 10;
+            
+            // Volatility adjustments
+            if (marketData.volatility > 1.5 && strategy.name === 'Bollinger Bands') score += 15;
+            if (marketData.volatility < 0.5 && strategy.name === 'Mean Reversion') score += 15;
+            
+            scores.push({ ...strategy, score: Math.min(100, Math.max(0, score)) });
         }
         
-        // Final signal determination
-        const signal = this.determineSignal(bestStrategy, consensus, dxyFilter, mode);
-        
-        return signal;
+        return scores.sort((a, b) => b.score - a.score);
     },
     
-    // Evaluate all 8 core strategies
-    evaluateAllStrategies(data, mode) {
-        const strategies = [];
-        
-        // 1. SMC (Smart Money Concepts)
-        strategies.push(this.SMCStrategy(data, mode));
-        
-        // 2. ICT (Inner Circle Trader)
-        strategies.push(this.ICTStrategy(data, mode));
-        
-        // 3. VSA (Volume Spread Analysis)
-        strategies.push(this.VSAStrategy(data, mode));
-        
-        // 4. Price Action
-        strategies.push(this.PriceActionStrategy(data, mode));
-        
-        // 5. Wyckoff
-        strategies.push(this.WyckoffStrategy(data, mode));
-        
-        // 6. Fibonacci
-        strategies.push(this.FibonacciStrategy(data, mode));
-        
-        // 7. Mean Reversion
-        strategies.push(this.MeanReversionStrategy(data, mode));
-        
-        // 8. Elliott Wave
-        strategies.push(this.ElliottWaveStrategy(data, mode));
-        
-        // Filter out low confidence
-        return strategies.filter(s => s.confidence > 40);
+    // Execute a specific strategy
+    async executeStrategy(strategy, data, mode) {
+        switch (strategy.fn) {
+            case 'smcStrategy': return this.smcStrategy(data, mode);
+            case 'ictStrategy': return this.ictStrategy(data, mode);
+            case 'vsaStrategy': return this.vsaStrategy(data, mode);
+            case 'priceActionStrategy': return this.priceActionStrategy(data, mode);
+            case 'wyckoffStrategy': return this.wyckoffStrategy(data, mode);
+            case 'fibonacciStrategy': return this.fibonacciStrategy(data, mode);
+            case 'meanReversionStrategy': return this.meanReversionStrategy(data, mode);
+            case 'elliottWaveStrategy': return this.elliottWaveStrategy(data, mode);
+            case 'rsiDivergenceStrategy': return this.rsiDivergenceStrategy(data, mode);
+            case 'macdStrategy': return this.macdStrategy(data, mode);
+            case 'bollingerStrategy': return this.bollingerStrategy(data, mode);
+            case 'supportResistanceStrategy': return this.supportResistanceStrategy(data, mode);
+            case 'breakoutStrategy': return this.breakoutStrategy(data, mode);
+            case 'maRibbonStrategy': return this.maRibbonStrategy(data, mode);
+            case 'ichimokuStrategy': return this.ichimokuStrategy(data, mode);
+            default: return { bias: 'WAIT', confidence: 40, reasons: ['Strategy not found'] };
+        }
     },
     
-    // SMC Strategy: Order Blocks, Liquidity Sweeps, Market Structure Shifts
-    SMCStrategy(data, mode) {
+    // MAIN ANALYSIS FUNCTION
+    async analyze(marketData, mode, config) {
+        const conditions = this.detectMarketConditions(marketData);
+        const scoredStrategies = this.scoreStrategies(conditions, marketData, mode);
+        
+        // Take top 3 strategies and average them
+        const topStrategies = scoredStrategies.slice(0, 3);
+        const results = [];
+        
+        for (const strategy of topStrategies) {
+            const result = await this.executeStrategy(strategy, marketData, mode);
+            results.push({ ...result, strategyName: strategy.name, strategyScore: strategy.score });
+        }
+        
+        // Weighted average based on strategy scores
+        let totalWeight = 0;
+        let weightedBias = { BUY: 0, SELL: 0, WAIT: 0 };
+        
+        for (const result of results) {
+            const weight = result.strategyScore / 100;
+            totalWeight += weight;
+            weightedBias[result.bias] += weight;
+        }
+        
+        // Determine final bias
+        let finalBias = 'WAIT';
+        let finalConfidence = 50;
+        let winningStrategy = results[0];
+        
+        if (weightedBias.BUY > 0.5) {
+            finalBias = 'BUY';
+            finalConfidence = Math.round(weightedBias.BUY * 100);
+        } else if (weightedBias.SELL > 0.5) {
+            finalBias = 'SELL';
+            finalConfidence = Math.round(weightedBias.SELL * 100);
+        }
+        
+        // Apply DXY filter if available
+        if (config.dxyData && config.dxyData.dxyStrength !== 'NEUTRAL') {
+            const isUSD = marketData.symbol.includes('USD');
+            if (isUSD) {
+                if (finalBias === 'BUY' && config.dxyData.dxyStrength === 'STRONG') {
+                    finalBias = 'WAIT';
+                    finalConfidence = 30;
+                } else if (finalBias === 'SELL' && config.dxyData.dxyStrength === 'WEAK') {
+                    finalBias = 'WAIT';
+                    finalConfidence = 30;
+                }
+            }
+        }
+        
+        // Grade filtering
+        if (finalConfidence < 55) finalBias = 'WAIT';
+        
+        return {
+            bias: finalBias,
+            confidence: finalConfidence,
+            primaryStrategy: winningStrategy.strategyName,
+            strategyScore: winningStrategy.strategyScore,
+            alternativeStrategies: results.slice(1).map(r => `${r.strategyName}(${r.bias})`).join(', '),
+            conditionsDetected: conditions.slice(0, 5).join(', '),
+            reasons: winningStrategy.reasons || []
+        };
+    },
+    
+    // ============ STRATEGY 1: SMC ============
+    smcStrategy(data, mode) {
         let bias = 'NEUTRAL';
         let confidence = 50;
         let reasons = [];
         
-        const { currentPrice, high24h, low24h, ema20, ema50, support, resistance } = data;
+        const liquiditySweptHigh = data.currentPrice >= data.high24h * 0.998;
+        const liquiditySweptLow = data.currentPrice <= data.low24h * 1.002;
         
-        // Detect liquidity sweep (price hitting recent high/low)
-        const liquiditySweptHigh = currentPrice >= high24h * 0.998;
-        const liquiditySweptLow = currentPrice <= low24h * 1.002;
-        
-        if (liquiditySweptHigh && currentPrice < resistance) {
+        if (liquiditySweptHigh && data.currentPrice < data.resistance) {
             bias = 'SELL';
             confidence += 25;
             reasons.push('Liquidity swept above - smart money sell');
-        } else if (liquiditySweptLow && currentPrice > support) {
+        } else if (liquiditySweptLow && data.currentPrice > data.support) {
             bias = 'BUY';
             confidence += 25;
             reasons.push('Liquidity swept below - smart money buy');
         }
         
-        // Order block detection (price reacting to EMA levels)
-        const nearEma20 = Math.abs(currentPrice - ema20) / currentPrice < 0.002;
-        if (nearEma20 && data.trend === 'BULLISH') {
-            bias = bias === 'NEUTRAL' ? 'BUY' : bias;
-            confidence += 15;
-            reasons.push('Price at EMA20 order block');
-        }
-        
-        return { name: 'SMC', bias, confidence, reasons };
+        return { bias, confidence, reasons };
     },
     
-    // ICT Strategy: FVG, MSS, AMD
-    ICTStrategy(data, mode) {
+    // ============ STRATEGY 2: ICT ============
+    ictStrategy(data, mode) {
         let bias = 'NEUTRAL';
         let confidence = 50;
         let reasons = [];
         
-        const { rsi, currentPrice, ema20, ema50, support, resistance } = data;
+        const range = data.resistance - data.support;
+        const fvgPresent = range / data.support > 0.003 && range / data.support < 0.015;
         
-        // Fair Value Gap detection (price gap between support/resistance)
-        const gapSize = (resistance - support) / support;
-        const fvgPresent = gapSize > 0.005 && gapSize < 0.02;
-        
-        if (fvgPresent && currentPrice < resistance - (gapSize * support * 0.3)) {
+        if (fvgPresent && data.currentPrice < data.resistance - range * 0.3) {
             bias = 'BUY';
             confidence += 20;
             reasons.push('FVG identified - price expected to fill gap');
         }
         
-        // Market Structure Shift
-        if (data.trend === 'BULLISH' && rsi > 40 && rsi < 60) {
-            bias = bias === 'NEUTRAL' ? 'BUY' : bias;
-            confidence += 15;
-            reasons.push('MSS confirmed - bullish momentum');
-        }
-        
-        // Killzones for scalping vs day trading
-        if (mode === 'scalp' && rsi < 35) {
+        if (mode === 'scalp' && data.rsi < 35) {
             bias = 'BUY';
             confidence += 20;
-            reasons.push('London/NY Killzone overshoot');
+            reasons.push('Killzone overshoot - scalp entry');
         }
         
-        return { name: 'ICT', bias, confidence, reasons };
+        return { bias, confidence, reasons };
     },
     
-    // VSA Strategy: Volume Spread Analysis
-    VSAStrategy(data, mode) {
+    // ============ STRATEGY 3: VSA ============
+    vsaStrategy(data, mode) {
         let bias = 'NEUTRAL';
         let confidence = 50;
         let reasons = [];
         
-        const { volumeSpike, currentPrice, support, resistance } = data;
-        
-        // Volume spike with price at support/resistance
-        if (volumeSpike && currentPrice <= support * 1.002) {
+        if (data.volumeSpike && data.currentPrice <= data.support * 1.002) {
             bias = 'BUY';
             confidence += 30;
             reasons.push('Ultra-high volume at support - stopping volume');
-        } else if (volumeSpike && currentPrice >= resistance * 0.998) {
+        } else if (data.volumeSpike && data.currentPrice >= data.resistance * 0.998) {
             bias = 'SELL';
             confidence += 30;
             reasons.push('Ultra-high volume at resistance - selling climax');
         }
         
-        // No volume confirmation = wait
-        if (!volumeSpike && confidence < 60) {
-            confidence -= 10;
-            reasons.push('Low volume confirmation');
-        }
-        
-        return { name: 'VSA', bias, confidence, reasons };
+        return { bias, confidence, reasons };
     },
     
-    // Price Action Strategy: Candlestick patterns, trendlines
-    PriceActionStrategy(data, mode) {
+    // ============ STRATEGY 4: Price Action ============
+    priceActionStrategy(data, mode) {
         let bias = 'NEUTRAL';
         let confidence = 50;
         let reasons = [];
         
-        const { rsi, currentPrice, ema20, ema50, trend, support, resistance } = data;
+        const nearSupport = data.currentPrice <= data.support * 1.005;
+        const nearResistance = data.currentPrice >= data.resistance * 0.995;
         
-        // Engulfing pattern detection (simplified)
-        const nearSupport = currentPrice <= support * 1.005;
-        const nearResistance = currentPrice >= resistance * 0.995;
-        
-        if (nearSupport && rsi < 40) {
+        if (nearSupport && data.rsi < 40) {
             bias = 'BUY';
             confidence += 25;
             reasons.push('Bullish engulfing at key support');
-        } else if (nearResistance && rsi > 60) {
+        } else if (nearResistance && data.rsi > 60) {
             bias = 'SELL';
             confidence += 25;
             reasons.push('Bearish engulfing at key resistance');
         }
         
-        // Trend following
-        if (trend === 'BULLISH' && rsi > 40 && rsi < 70) {
+        if (data.trend === 'BULLISH' && data.rsi > 40 && data.rsi < 70) {
             bias = bias === 'NEUTRAL' ? 'BUY' : bias;
             confidence += 15;
-            reasons.push('Higher highs/lows - trend continuation');
         }
         
-        return { name: 'Price Action', bias, confidence, reasons };
+        return { bias, confidence, reasons };
     },
     
-    // Wyckoff Strategy: Accumulation/Distribution
-    WyckoffStrategy(data, mode) {
+    // ============ STRATEGY 5: Wyckoff ============
+    wyckoffStrategy(data, mode) {
         let bias = 'NEUTRAL';
         let confidence = 50;
         let reasons = [];
         
-        const { rsi, currentPrice, support, resistance, volumeSpike } = data;
-        
-        // Spring detection (price below support then reclaim)
-        const springDetected = currentPrice > support && support > 0;
-        
-        // Upthrust detection (price above resistance then rejection)
-        const upthrustDetected = currentPrice < resistance && resistance > 0;
-        
-        if (springDetected && volumeSpike) {
+        if (data.rsi < 35 && data.volumeSpike) {
             bias = 'BUY';
             confidence += 35;
             reasons.push('Wyckoff Spring - bullish reversal');
-        } else if (upthrustDetected && volumeSpike) {
+        } else if (data.rsi > 65 && data.volumeSpike) {
             bias = 'SELL';
             confidence += 35;
             reasons.push('Wyckoff Upthrust - bearish reversal');
         }
         
-        // Accumulation phase
-        if (rsi < 35 && data.volatility < 0.5) {
-            bias = bias === 'NEUTRAL' ? 'BUY' : bias;
-            confidence += 20;
-            reasons.push('Accumulation phase - smart money buying');
-        }
-        
-        return { name: 'Wyckoff', bias, confidence, reasons };
+        return { bias, confidence, reasons };
     },
     
-    // Fibonacci Strategy: Retracement levels, extensions
-    FibonacciStrategy(data, mode) {
+    // ============ STRATEGY 6: Fibonacci ============
+    fibonacciStrategy(data, mode) {
         let bias = 'NEUTRAL';
         let confidence = 50;
         let reasons = [];
         
-        const { currentPrice, high24h, low24h } = data;
+        const range = data.high24h - data.low24h;
+        const fib618 = data.low24h + range * 0.618;
+        const fib786 = data.low24h + range * 0.786;
         
-        const range = high24h - low24h;
-        const fib618 = low24h + range * 0.618;
-        const fib382 = low24h + range * 0.382;
-        const fib786 = low24h + range * 0.786;
-        
-        // Price at Fibonacci levels
-        const atFib618 = Math.abs(currentPrice - fib618) / currentPrice < 0.001;
-        const atFib382 = Math.abs(currentPrice - fib382) / currentPrice < 0.001;
-        const atFib786 = Math.abs(currentPrice - fib786) / currentPrice < 0.001;
+        const atFib618 = Math.abs(data.currentPrice - fib618) / data.currentPrice < 0.001;
+        const atFib786 = Math.abs(data.currentPrice - fib786) / data.currentPrice < 0.001;
         
         if (atFib618 || atFib786) {
             bias = data.trend === 'BULLISH' ? 'BUY' : 'SELL';
             confidence += 20;
             reasons.push(`Price at Fibonacci ${atFib618 ? '61.8%' : '78.6%'} retracement`);
-        } else if (atFib382) {
-            confidence += 10;
-            reasons.push('38.2% Fib - shallow retracement');
         }
         
-        return { name: 'Fibonacci', bias, confidence, reasons };
+        return { bias, confidence, reasons };
     },
     
-    // Mean Reversion Strategy: RSI, Bollinger Bands
-    MeanReversionStrategy(data, mode) {
+    // ============ STRATEGY 7: Mean Reversion ============
+    meanReversionStrategy(data, mode) {
         let bias = 'NEUTRAL';
         let confidence = 50;
         let reasons = [];
         
-        const { rsi, currentPrice, volatility } = data;
-        
-        // Extreme RSI levels
-        if (rsi < 25) {
+        if (data.rsi < 25) {
             bias = 'BUY';
-            confidence += 30;
-            reasons.push(`Extreme RSI (${rsi.toFixed(1)}) - mean reversion expected`);
-        } else if (rsi > 75) {
+            confidence += 35;
+            reasons.push(`Extreme RSI (${data.rsi.toFixed(1)}) - mean reversion expected`);
+        } else if (data.rsi > 75) {
             bias = 'SELL';
-            confidence += 30;
-            reasons.push(`Extreme RSI (${rsi.toFixed(1)}) - mean reversion expected`);
+            confidence += 35;
+            reasons.push(`Extreme RSI (${data.rsi.toFixed(1)}) - mean reversion expected`);
         }
         
-        // Oversold/Overbought with volatility adjustment
-        if (rsi < 35 && volatility > 0.5) {
-            confidence += 10;
-            reasons.push('High volatility oversold - bounce likely');
-        }
-        
-        return { name: 'Mean Reversion', bias, confidence, reasons };
+        return { bias, confidence, reasons };
     },
     
-    // Elliott Wave Strategy: Impulse/Corrective waves
-    ElliottWaveStrategy(data, mode) {
+    // ============ STRATEGY 8: Elliott Wave ============
+    elliottWaveStrategy(data, mode) {
         let bias = 'NEUTRAL';
         let confidence = 50;
         let reasons = [];
         
-        const { currentPrice, support, resistance, trend } = data;
+        const atResistance = data.currentPrice >= data.resistance * 0.998;
+        const atSupport = data.currentPrice <= data.support * 1.002;
         
-        // Simplified wave detection
-        const atResistance = currentPrice >= resistance * 0.998;
-        const atSupport = currentPrice <= support * 1.002;
-        
-        if (trend === 'BULLISH' && atSupport) {
+        if (data.trend === 'BULLISH' && atSupport) {
             bias = 'BUY';
             confidence += 25;
             reasons.push('Wave 2/4 completion - impulsive wave expected');
-        } else if (trend === 'BEARISH' && atResistance) {
+        } else if (data.trend === 'BEARISH' && atResistance) {
             bias = 'SELL';
             confidence += 25;
             reasons.push('Corrective wave complete - impulse down');
         }
         
-        return { name: 'Elliott Wave', bias, confidence, reasons };
+        return { bias, confidence, reasons };
     },
     
-    // Calculate consensus across all strategies
-    calculateConsensus(strategies) {
-        const buyCount = strategies.filter(s => s.bias === 'BUY').length;
-        const sellCount = strategies.filter(s => s.bias === 'SELL').length;
+    // ============ STRATEGY 9: RSI Divergence ============
+    rsiDivergenceStrategy(data, mode) {
+        let bias = 'NEUTRAL';
+        let confidence = 50;
+        let reasons = [];
         
-        const total = strategies.length;
-        const buyRatio = buyCount / total;
-        const sellRatio = sellCount / total;
+        // Simplified divergence detection
+        const priceHigher = data.currentPrice > data.prevClose;
+        const rsiHigher = data.rsi > 50;
         
-        let consensus = 'NEUTRAL';
-        let strength = 0;
-        
-        if (buyRatio > 0.6) {
-            consensus = 'BUY';
-            strength = buyRatio;
-        } else if (sellRatio > 0.6) {
-            consensus = 'SELL';
-            strength = sellRatio;
+        if (priceHigher && !rsiHigher) {
+            bias = 'SELL';
+            confidence += 25;
+            reasons.push('Bearish divergence - price up, RSI down');
+        } else if (!priceHigher && rsiHigher) {
+            bias = 'BUY';
+            confidence += 25;
+            reasons.push('Bullish divergence - price down, RSI up');
         }
         
-        return { consensus, strength };
+        return { bias, confidence, reasons };
     },
     
-    // DXY Filter - prevents Dollar Traps
-    applyDXYFilter(marketData, dxyData, strategy) {
-        const isUSD = marketData.symbol.includes('USD') || marketData.symbol === 'XAUUSD';
+    // ============ STRATEGY 10: MACD Crossover ============
+    macdStrategy(data, mode) {
+        let bias = 'NEUTRAL';
+        let confidence = 50;
+        let reasons = [];
         
-        if (!isUSD) {
-            return { approved: true, reason: 'Non-USD pair, DXY filter bypassed' };
+        // Calculate quick MACD approximation
+        const ema12 = data.ema20 * 0.6; // Approximation
+        const ema26 = data.ema50 * 0.52;
+        const macd = ema12 - ema26;
+        const signal = macd * 0.9;
+        
+        if (macd > signal && macd > 0) {
+            bias = 'BUY';
+            confidence += 20;
+            reasons.push('Bullish MACD crossover above zero');
+        } else if (macd < signal && macd < 0) {
+            bias = 'SELL';
+            confidence += 20;
+            reasons.push('Bearish MACD crossover below zero');
         }
         
-        // Dollar Traps: When DXY and pair give conflicting signals
-        const dxyBullish = dxyData.dxyTrend === 'BULLISH';
-        const dxyBearish = dxyData.dxyTrend === 'BEARISH';
-        
-        if (strategy.bias === 'BUY' && dxyBullish) {
-            return { approved: false, reason: 'DXY TRAP: Strong Dollar conflicting with BUY signal' };
-        }
-        
-        if (strategy.bias === 'SELL' && dxyBearish) {
-            return { approved: false, reason: 'DXY TRAP: Weak Dollar conflicting with SELL signal' };
-        }
-        
-        return { approved: true, reason: 'DXY confirmation aligned' };
+        return { bias, confidence, reasons };
     },
     
-    // Final signal determination with RR guard
-    determineSignal(strategy, consensus, dxyFilter, mode) {
-        let finalBias = strategy.bias;
-        let finalConfidence = (strategy.confidence + consensus.strength * 100) / 2;
+    // ============ STRATEGY 11: Bollinger Bands ============
+    bollingerStrategy(data, mode) {
+        let bias = 'NEUTRAL';
+        let confidence = 50;
+        let reasons = [];
         
-        // Override with consensus if strong
-        if (consensus.strength > 0.7 && consensus.consensus !== 'NEUTRAL') {
-            finalBias = consensus.consensus;
-            finalConfidence = Math.max(finalConfidence, 75);
+        const sma = (data.high24h + data.low24h) / 2;
+        const std = data.atr * 1.5;
+        const upperBB = sma + std * 2;
+        const lowerBB = sma - std * 2;
+        
+        if (data.currentPrice <= lowerBB) {
+            bias = 'BUY';
+            confidence += 25;
+            reasons.push('Price below lower Bollinger Band - mean reversion up');
+        } else if (data.currentPrice >= upperBB) {
+            bias = 'SELL';
+            confidence += 25;
+            reasons.push('Price above upper Bollinger Band - mean reversion down');
         }
         
-        // DXY filter override
-        if (!dxyFilter.approved) {
-            finalBias = 'WAIT';
-            finalConfidence = 30;
+        return { bias, confidence, reasons };
+    },
+    
+    // ============ STRATEGY 12: Support/Resistance ============
+    supportResistanceStrategy(data, mode) {
+        let bias = 'NEUTRAL';
+        let confidence = 50;
+        let reasons = [];
+        
+        const bouncedOffSupport = data.currentPrice > data.support && 
+            Math.abs(data.currentPrice - data.support) / data.support < 0.002;
+        const rejectedFromResistance = data.currentPrice < data.resistance && 
+            Math.abs(data.currentPrice - data.resistance) / data.resistance < 0.002;
+        
+        if (bouncedOffSupport) {
+            bias = 'BUY';
+            confidence += 25;
+            reasons.push('Bounced off key support level');
+        } else if (rejectedFromResistance) {
+            bias = 'SELL';
+            confidence += 25;
+            reasons.push('Rejected from key resistance level');
         }
         
-        // Grade filtering: Only accept A+/A/B+ setups
-        if (finalConfidence < 55) {
-            finalBias = 'WAIT';
+        return { bias, confidence, reasons };
+    },
+    
+    // ============ STRATEGY 13: Breakout ============
+    breakoutStrategy(data, mode) {
+        let bias = 'NEUTRAL';
+        let confidence = 50;
+        let reasons = [];
+        
+        const brokeResistance = data.currentPrice > data.resistance;
+        const brokeSupport = data.currentPrice < data.support;
+        
+        if (brokeResistance && data.volumeSpike) {
+            bias = 'BUY';
+            confidence += 30;
+            reasons.push('Bullish breakout with volume confirmation');
+        } else if (brokeSupport && data.volumeSpike) {
+            bias = 'SELL';
+            confidence += 30;
+            reasons.push('Bearish breakdown with volume confirmation');
         }
         
-        // Mode-specific adjustments
-        if (mode === 'scalp' && finalBias !== 'WAIT') {
-            // Scalping: more aggressive but maintain minimum confidence
-            if (finalConfidence < 50) finalBias = 'WAIT';
+        return { bias, confidence, reasons };
+    },
+    
+    // ============ STRATEGY 14: Moving Average Ribbon ============
+    maRibbonStrategy(data, mode) {
+        let bias = 'NEUTRAL';
+        let confidence = 50;
+        let reasons = [];
+        
+        const ribbonBullish = data.ema20 > data.ema50 && data.ema50 > data.ema200;
+        const ribbonBearish = data.ema20 < data.ema50 && data.ema50 < data.ema200;
+        
+        if (ribbonBullish && data.currentPrice > data.ema20) {
+            bias = 'BUY';
+            confidence += 25;
+            reasons.push('Price above bullish MA ribbon');
+        } else if (ribbonBearish && data.currentPrice < data.ema20) {
+            bias = 'SELL';
+            confidence += 25;
+            reasons.push('Price below bearish MA ribbon');
         }
         
-        if (mode === 'day' && finalBias !== 'WAIT') {
-            // Day trading: require higher conviction
-            if (finalConfidence < 60) finalBias = 'WAIT';
+        return { bias, confidence, reasons };
+    },
+    
+    // ============ STRATEGY 15: Ichimoku ============
+    ichimokuStrategy(data, mode) {
+        let bias = 'NEUTRAL';
+        let confidence = 50;
+        let reasons = [];
+        
+        // Simplified Ichimoku
+        const tenkanSen = (data.high24h + data.low24h) / 2;
+        const kijunSen = (data.resistance + data.support) / 2;
+        
+        if (data.currentPrice > tenkanSen && tenkanSen > kijunSen) {
+            bias = 'BUY';
+            confidence += 20;
+            reasons.push('Price above Ichimoku cloud - bullish');
+        } else if (data.currentPrice < tenkanSen && tenkanSen < kijunSen) {
+            bias = 'SELL';
+            confidence += 20;
+            reasons.push('Price below Ichimoku cloud - bearish');
         }
         
-        return {
-            bias: finalBias,
-            confidence: Math.round(finalConfidence),
-            primaryStrategy: strategy.name,
-            strategyReasons: strategy.reasons.slice(0, 2)
-        };
+        return { bias, confidence, reasons };
     }
 };
