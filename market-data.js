@@ -1,22 +1,20 @@
 /**
- * MARKET DATA FETCHER – uses cors‑anywhere proxy (reliable)
- * Unlock the proxy first: open https://cors-anywhere.herokuapp.com/ and click "Request temporary access"
+ * MARKET DATA FETCHER – Twelve Data WebSocket (real‑time) + REST with aggressive caching
+ * - Real‑time: XAUUSD, XAGUSD via WebSocket (0 credits)
+ * - Other assets: REST with 60‑second cache (minimises API calls)
+ * - Auto tracking uses cached values, never makes extra REST calls.
  */
 
 const MarketData = {
-    alphaKey: null,
-    proxy: 'https://cors-anywhere.herokuapp.com/',   // requires temporary unlock
-
-    yahooMap: {
-        'EURUSD': 'EURUSD=X',
-        'GBPUSD': 'GBPUSD=X',
-        'BTCUSD': 'BTC-USD',
-        'ETHUSD': 'ETH-USD'
-    },
+    ws: null,
+    wsConnected: false,
+    lastPrices: {},        // real‑time price cache (WebSocket)
+    restCache: {},         // REST responses with timestamp
+    apiKey: null,
 
     assetInfo: {
-        'XAUUSD': { class: 'commodities', spread: 0.20, multiplier: 100, name: 'Gold', digits: 2 },
-        'XAGUSD': { class: 'commodities', spread: 0.03, multiplier: 100, name: 'Silver', digits: 3 },
+        'XAUUSD': { class: 'commodities', spread: 0.20, multiplier: 100, name: 'Gold', digits: 2, realtime: true },
+        'XAGUSD': { class: 'commodities', spread: 0.03, multiplier: 100, name: 'Silver', digits: 3, realtime: true },
         'OILCash': { class: 'commodities', spread: 0.03, multiplier: 100, name: 'WTI Oil', digits: 2 },
         'EURUSD': { class: 'forex', spread: 0.0001, multiplier: 10000, name: 'EUR/USD', digits: 5 },
         'GBPUSD': { class: 'forex', spread: 0.0001, multiplier: 10000, name: 'GBP/USD', digits: 5 },
@@ -24,205 +22,199 @@ const MarketData = {
         'ETHUSD': { class: 'crypto', spread: 0.50, multiplier: 10, name: 'Ethereum', digits: 0 }
     },
 
-    setAlphaKey(key) { this.alphaKey = key; localStorage.setItem('alpha_api_key', key); },
-    getAlphaKey() { if (!this.alphaKey) this.alphaKey = localStorage.getItem('alpha_api_key'); return this.alphaKey; },
+    setApiKey(key) { this.apiKey = key; localStorage.setItem('twelve_data_key', key); },
+    getApiKey() { if (!this.apiKey) this.apiKey = localStorage.getItem('twelve_data_key'); return this.apiKey; },
 
-    async fetchWithProxy(url) {
-        const response = await fetch(this.proxy + url);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return await response.json();
+    // ---- WebSocket (real‑time, 0 credits) ----
+    initWebSocket(apiKey) {
+        if (!apiKey) return;
+        if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return;
+        const wsUrl = `wss://ws.twelvedata.com/v1/quotes?apikey=${apiKey}`;
+        this.ws = new WebSocket(wsUrl);
+        this.ws.onopen = () => {
+            console.log('WebSocket connected');
+            this.wsConnected = true;
+            this.ws.send(JSON.stringify({ action: 'subscribe', symbols: ['XAUUSD', 'XAGUSD'] }));
+        };
+        this.ws.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.symbol && data.price) {
+                    this.lastPrices[data.symbol] = { price: data.price, timestamp: Date.now() };
+                }
+            } catch(e) {}
+        };
+        this.ws.onerror = (err) => console.warn('WebSocket error', err);
+        this.ws.onclose = () => {
+            this.wsConnected = false;
+            setTimeout(() => this.initWebSocket(apiKey), 5000);
+        };
     },
 
+    async getRealtimePrice(symbol) {
+        if (!this.wsConnected) return null;
+        const start = Date.now();
+        while (!this.lastPrices[symbol] && Date.now() - start < 3000) {
+            await new Promise(r => setTimeout(r, 100));
+        }
+        const cached = this.lastPrices[symbol];
+        if (cached && (Date.now() - cached.timestamp) < 5000) return cached.price;
+        return null;
+    },
+
+    // ---- REST with 60‑second cache (saves credits) ----
+    async fetchFromTwelveData(symbol) {
+        const apiKey = this.getApiKey();
+        // Check cache first
+        const cached = this.restCache[symbol];
+        if (cached && (Date.now() - cached.timestamp) < 60000) {
+            console.log(`Using cached data for ${symbol} (${Math.round((Date.now() - cached.timestamp)/1000)}s old)`);
+            return cached.data;
+        }
+        // No cache or expired – make API call (consumes 1 credit)
+        const url = `https://api.twelvedata.com/time_series?symbol=${symbol}&interval=1h&outputsize=100&apikey=${apiKey || 'demo'}`;
+        const resp = await fetch(url);
+        const data = await resp.json();
+        if (!data.values || data.values.length === 0) throw new Error('No data');
+        const vals = data.values;
+        const closes = vals.map(v => parseFloat(v.close));
+        const highs = vals.map(v => parseFloat(v.high));
+        const lows = vals.map(v => parseFloat(v.low));
+        const current = parseFloat(vals[0].close);
+        const result = {
+            currentPrice: current,
+            prevClose: parseFloat(vals[1]?.close || current),
+            dailyChange: ((current - parseFloat(vals[23]?.close || current)) / current) * 100,
+            high24h: Math.max(...highs.slice(0,24)),
+            low24h: Math.min(...lows.slice(0,24)),
+            volumeSpike: false,
+            rsi: this.calcRSI(closes, 14),
+            atr: this.calcATR(highs, lows, closes, 14),
+            ema20: this.calcEMA(closes, 20),
+            ema50: this.calcEMA(closes, 50),
+            ema200: this.calcEMA(closes, 200),
+            support: Math.min(...lows.slice(0,50)),
+            resistance: Math.max(...highs.slice(0,50)),
+            trend: this.determineTrend(closes),
+            volatility: (this.calcATR(highs, lows, closes, 14) / current) * 100,
+            _source: 'Twelve Data REST'
+        };
+        // Store in cache
+        this.restCache[symbol] = { data: result, timestamp: Date.now() };
+        return result;
+    },
+
+    // ---- Main fetch (uses WebSocket for real‑time symbols, REST with cache for others) ----
     async fetch(xmSymbol) {
         const info = this.assetInfo[xmSymbol];
         if (!info) return null;
 
-        // 1. Alpha Vantage (if key present)
-        const alphaKey = this.getAlphaKey();
-        if (alphaKey) {
-            try {
-                const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${xmSymbol}&apikey=${alphaKey}`;
-                const data = await this.fetchWithProxy(url);
-                const quote = data['Global Quote'];
-                if (quote && quote['05. price']) {
-                    const price = parseFloat(quote['05. price']);
+        const apiKey = this.getApiKey();
+        if (!apiKey) {
+            console.warn('No API key – using demo REST (delayed)');
+        }
+
+        // Real‑time assets: try WebSocket first (0 credits)
+        if (info.realtime && apiKey) {
+            if (!this.wsConnected) this.initWebSocket(apiKey);
+            const realPrice = await this.getRealtimePrice(xmSymbol);
+            if (realPrice) {
+                // Get full indicators from REST (cached)
+                let cachedFull = this.restCache[xmSymbol + '_full'];
+                if (!cachedFull || Date.now() - cachedFull.timestamp > 60000) {
+                    try {
+                        const full = await this.fetchFromTwelveData(xmSymbol);
+                        if (full) {
+                            this.restCache[xmSymbol + '_full'] = { data: full, timestamp: Date.now() };
+                        }
+                    } catch(e) {}
+                }
+                const fullData = this.restCache[xmSymbol + '_full']?.data;
+                if (fullData) {
+                    const result = { ...fullData, ...info };
+                    result.currentPrice = realPrice;
+                    result._source = 'WebSocket (real‑time) + REST indicators';
+                    return result;
+                } else {
+                    // Fallback: price only
                     return {
-                        currentPrice: price,
-                        prevClose: price * 0.999,
+                        currentPrice: realPrice,
+                        prevClose: realPrice * 0.999,
                         dailyChange: 0,
-                        high24h: price * 1.005,
-                        low24h: price * 0.995,
+                        high24h: realPrice * 1.005,
+                        low24h: realPrice * 0.995,
                         volumeSpike: false,
                         rsi: 50,
-                        atr: price * 0.001,
-                        ema20: price,
-                        ema50: price,
-                        ema200: price,
-                        support: price * 0.998,
-                        resistance: price * 1.002,
+                        atr: realPrice * 0.001,
+                        ema20: realPrice,
+                        ema50: realPrice,
+                        ema200: realPrice,
+                        support: realPrice * 0.998,
+                        resistance: realPrice * 1.002,
                         trend: 'SIDEWAYS',
                         volatility: 0.3,
                         ...info,
-                        _source: 'Alpha Vantage'
+                        _source: 'WebSocket (price only)'
                     };
                 }
-            } catch(e) { console.warn('Alpha Vantage failed:', e); }
-        }
-
-        // 2. Twelve Data (direct – no proxy needed)
-        try {
-            const url = `https://api.twelvedata.com/time_series?symbol=${xmSymbol}&interval=1h&outputsize=100&apikey=demo`;
-            const resp = await fetch(url);
-            const data = await resp.json();
-            if (data.values && data.values.length > 0) {
-                const vals = data.values;
-                const closes = vals.map(v => parseFloat(v.close));
-                const highs = vals.map(v => parseFloat(v.high));
-                const lows = vals.map(v => parseFloat(v.low));
-                const current = parseFloat(vals[0].close);
-                return {
-                    currentPrice: current,
-                    prevClose: parseFloat(vals[1]?.close || current),
-                    dailyChange: ((current - parseFloat(vals[23]?.close || current)) / current) * 100,
-                    high24h: Math.max(...highs.slice(0,24)),
-                    low24h: Math.min(...lows.slice(0,24)),
-                    volumeSpike: false,
-                    rsi: this.calcRSI(closes, 14),
-                    atr: this.calcATR(highs, lows, closes, 14),
-                    ema20: this.calcEMA(closes, 20),
-                    ema50: this.calcEMA(closes, 50),
-                    ema200: this.calcEMA(closes, 200),
-                    support: Math.min(...lows.slice(0,50)),
-                    resistance: Math.max(...highs.slice(0,50)),
-                    trend: this.determineTrend(closes),
-                    volatility: (this.calcATR(highs, lows, closes, 14) / current) * 100,
-                    ...info,
-                    _source: 'Twelve Data'
-                };
             }
-        } catch(e) { console.warn('Twelve Data failed:', e); }
-
-        // 3. Binance (crypto only)
-        if (info.class === 'crypto') {
-            try {
-                let binSym = xmSymbol === 'BTCUSD' ? 'BTCUSDT' : (xmSymbol === 'ETHUSD' ? 'ETHUSDT' : null);
-                if (binSym) {
-                    const resp = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${binSym}`);
-                    const data = await resp.json();
-                    if (!data.code) {
-                        const price = parseFloat(data.lastPrice);
-                        const klines = await fetch(`https://api.binance.com/api/v3/klines?symbol=${binSym}&interval=1h&limit=100`);
-                        const kd = await klines.json();
-                        const closes = kd.map(c => parseFloat(c[4]));
-                        const highs = kd.map(c => parseFloat(c[2]));
-                        const lows = kd.map(c => parseFloat(c[3]));
-                        return {
-                            currentPrice: price,
-                            prevClose: parseFloat(data.prevClosePrice),
-                            dailyChange: parseFloat(data.priceChangePercent),
-                            high24h: parseFloat(data.highPrice),
-                            low24h: parseFloat(data.lowPrice),
-                            volumeSpike: parseFloat(data.volume) > parseFloat(data.quoteVolume)/2,
-                            rsi: this.calcRSI(closes, 14),
-                            atr: this.calcATR(highs, lows, closes, 14),
-                            ema20: this.calcEMA(closes, 20),
-                            ema50: this.calcEMA(closes, 50),
-                            ema200: this.calcEMA(closes, 200),
-                            support: Math.min(...lows.slice(-50)),
-                            resistance: Math.max(...highs.slice(-50)),
-                            trend: this.determineTrend(closes),
-                            volatility: this.calcATR(highs, lows, closes, 14) / price * 100,
-                            ...info,
-                            _source: 'Binance'
-                        };
-                    }
-                }
-            } catch(e) { console.warn('Binance failed:', e); }
         }
 
-        // 4. Yahoo Finance (via proxy)
-        const yahooSym = this.yahooMap[xmSymbol];
-        if (yahooSym) {
-            try {
-                const directUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSym}?interval=1h&range=2d`;
-                const data = await this.fetchWithProxy(directUrl);
-                const result = data.chart?.result?.[0];
-                if (result) {
-                    const quotes = result.indicators.quote[0];
-                    const closes = quotes.close.filter(c => c !== null);
-                    const highs = quotes.high.filter(h => h !== null);
-                    const lows = quotes.low.filter(l => l !== null);
-                    const current = closes[closes.length-1];
-                    return {
-                        currentPrice: current,
-                        prevClose: closes[closes.length-2] || current,
-                        dailyChange: ((current - closes[0]) / closes[0]) * 100,
-                        high24h: Math.max(...highs.slice(-24)),
-                        low24h: Math.min(...lows.slice(-24)),
-                        volumeSpike: false,
-                        rsi: this.calcRSI(closes, 14),
-                        atr: this.calcATR(highs, lows, closes, 14),
-                        ema20: this.calcEMA(closes, 20),
-                        ema50: this.calcEMA(closes, 50),
-                        ema200: this.calcEMA(closes, 200),
-                        support: Math.min(...lows.slice(-50)),
-                        resistance: Math.max(...highs.slice(-50)),
-                        trend: this.determineTrend(closes),
-                        volatility: this.calcATR(highs, lows, closes, 14) / current * 100,
-                        ...info,
-                        _source: 'Yahoo (proxy)'
-                    };
-                }
-            } catch(e) { console.warn('Yahoo failed:', e); }
+        // For all other assets, use REST with cache
+        try {
+            const data = await this.fetchFromTwelveData(xmSymbol);
+            return { ...data, ...info };
+        } catch(e) {
+            console.error(`Failed to fetch ${xmSymbol}:`, e);
+            return null;
         }
-
-        // If all fail, show a clear message
-        console.error('All APIs failed for', xmSymbol);
-        return null;
     },
 
     async fetchDXY() {
-        try {
-            const directUrl = 'https://query1.finance.yahoo.com/v8/finance/chart/DX-Y.NYB?interval=1h&range=1d';
-            const data = await this.fetchWithProxy(directUrl);
-            const result = data.chart?.result?.[0];
-            if (result) {
-                const quotes = result.indicators.quote[0];
-                const closes = quotes.close.filter(c => c !== null);
-                const currentPrice = closes[closes.length-1];
-                let rsi = 50;
-                if (closes.length >= 15) {
-                    let gains = 0, losses = 0;
-                    for (let i = closes.length-15; i < closes.length-1; i++) {
-                        const diff = closes[i+1] - closes[i];
-                        if (diff > 0) gains += diff;
-                        else losses -= diff;
-                    }
-                    const avgGain = gains / 14;
-                    const avgLoss = losses / 14;
-                    if (avgLoss > 0) rsi = 100 - (100 / (1 + (avgGain / avgLoss)));
-                }
-                return {
-                    dxyPrice: currentPrice,
-                    dxyTrend: rsi > 70 ? 'STRONG' : (rsi < 30 ? 'WEAK' : 'NEUTRAL'),
-                    dxyStrength: rsi > 70 ? 'STRONG' : (rsi < 30 ? 'WEAK' : 'NEUTRAL')
-                };
-            }
-            throw new Error('No DXY data');
-        } catch(e) {
-            return { dxyPrice: 0, dxyTrend: 'NEUTRAL', dxyStrength: 'NEUTRAL' };
-        }
+        return { dxyPrice: 0, dxyTrend: 'NEUTRAL', dxyStrength: 'NEUTRAL' };
     },
 
-    // Helper functions (unchanged)
-    calcRSI(prices, period) { /* same as before */ },
-    calcATR(highs, lows, closes, period) { /* same as before */ },
-    calcEMA(prices, period) { /* same as before */ },
-    determineTrend(prices) { /* same as before */ }
-};
+    // Technical indicators (unchanged)
+    calcRSI(prices, period) {
+        if (prices.length < period + 1) return 50;
+        let gains = 0, losses = 0;
+        for (let i = prices.length - period; i < prices.length - 1; i++) {
+            const diff = prices[i+1] - prices[i];
+            if (diff > 0) gains += diff;
+            else losses -= diff;
+        }
+        const avgGain = gains / period;
+        const avgLoss = losses / period;
+        if (avgLoss === 0) return 100;
+        const rs = avgGain / avgLoss;
+        return 100 - (100 / (1 + rs));
+    },
 
-// Re‑attach helper functions (keep from your previous version)
-MarketData.calcRSI = function(prices, period) { ... }; // add the full implementations from your original file
-MarketData.calcATR = function(highs, lows, closes, period) { ... };
-MarketData.calcEMA = function(prices, period) { ... };
-MarketData.determineTrend = function(prices) { ... };
+    calcATR(highs, lows, closes, period) {
+        if (highs.length < period) return (highs[highs.length-1] - lows[highs.length-1]) / 2;
+        let trs = [];
+        for (let i = highs.length - period; i < highs.length; i++) {
+            const hl = highs[i] - lows[i];
+            const hc = Math.abs(highs[i] - closes[i-1]);
+            const lc = Math.abs(lows[i] - closes[i-1]);
+            trs.push(Math.max(hl, hc, lc));
+        }
+        return trs.reduce((a,b) => a + b, 0) / period;
+    },
+
+    calcEMA(prices, period) {
+        if (prices.length < period) return prices[prices.length-1];
+        const k = 2 / (period + 1);
+        let ema = prices.slice(0, period).reduce((a,b) => a + b, 0) / period;
+        for (let i = period; i < prices.length; i++) ema = prices[i] * k + ema * (1 - k);
+        return ema;
+    },
+
+    determineTrend(prices) {
+        const ema20 = this.calcEMA(prices, 20);
+        const ema50 = this.calcEMA(prices, 50);
+        if (ema20 > ema50) return 'BULLISH';
+        if (ema20 < ema50) return 'BEARISH';
+        return 'SIDEWAYS';
+    }
+};
