@@ -1,6 +1,6 @@
 // market-data.js – Reads static JSON, maintains full price history
 const MarketData = {
-    BASE_URL: 'https://YOUR_USERNAME.github.io/market-data-api/data/', // change to your username
+    BASE_URL: 'https://riyazsapkota31-bit.github.io/market-data-api/data/',
 
     assetMap: {
         'XAUUSD': { file: 'xauusd', digits: 2, multiplier: 100, name: 'Gold' },
@@ -42,7 +42,7 @@ const MarketData = {
         if (prices.length < period + 1) return 50;
         let gains = 0, losses = 0;
         for (let i = prices.length - period; i < prices.length - 1; i++) {
-            const diff = prices[i+1] - prices[i];
+            const diff = prices[i + 1] - prices[i];
             if (diff > 0) gains += diff;
             else losses -= diff;
         }
@@ -54,9 +54,9 @@ const MarketData = {
     },
 
     calcEMA(prices, period) {
-        if (prices.length < period) return prices[prices.length-1];
+        if (prices.length < period) return prices[prices.length - 1];
         const k = 2 / (period + 1);
-        let ema = prices.slice(0, period).reduce((a,b)=>a+b,0)/period;
+        let ema = prices.slice(0, period).reduce((a, b) => a + b, 0) / period;
         for (let i = period; i < prices.length; i++) {
             ema = prices[i] * k + ema * (1 - k);
         }
@@ -90,7 +90,7 @@ const MarketData = {
             let trend = 'SIDEWAYS';
             let atr = currentPrice * 0.001;
             let volatility = 0.3;
-            let volumeSpike = false; // not provided, skip
+            let volumeSpike = false;
 
             if (hasHistory) {
                 rsi = this.calcRSI(prices);
@@ -108,7 +108,7 @@ const MarketData = {
 
             return {
                 currentPrice,
-                prevClose: prices.length >= 2 ? prices[prices.length-2] : currentPrice,
+                prevClose: prices.length >= 2 ? prices[prices.length - 2] : currentPrice,
                 dailyChange: json.change || 0,
                 high24h: json.high || currentPrice * 1.005,
                 low24h: json.low || currentPrice * 0.995,
@@ -125,7 +125,7 @@ const MarketData = {
                 symbol,
                 digits: cfg.digits,
                 multiplier: cfg.multiplier,
-                spread: { 'XAUUSD':0.20, 'XAGUSD':0.03, 'OILCash':0.03, 'EURUSD':0.0001, 'GBPUSD':0.0001, 'BTCUSD':0.50, 'ETHUSD':0.50 }[symbol],
+                spread: { 'XAUUSD': 0.20, 'XAGUSD': 0.03, 'OILCash': 0.03, 'EURUSD': 0.0001, 'GBPUSD': 0.0001, 'BTCUSD': 0.50, 'ETHUSD': 0.50 }[symbol],
                 class: symbol.includes('USD') ? (symbol === 'XAUUSD' || symbol === 'XAGUSD' || symbol === 'OILCash' ? 'commodities' : (symbol === 'BTCUSD' || symbol === 'ETHUSD' ? 'crypto' : 'forex')) : 'forex',
                 _source: 'Static API'
             };
@@ -146,13 +146,11 @@ const MarketData = {
             const res = await fetch(url + '?t=' + Date.now());
             const data = await res.json();
             if (data.error) return { dxyPrice: 0, dxyTrend: 'NEUTRAL', dxyStrength: 'NEUTRAL' };
-            const price = data.price;
-            // simple trend detection
             let trend = 'NEUTRAL', strength = 'NEUTRAL';
             if (data.change > 0.3) trend = 'STRONG';
             else if (data.change < -0.3) trend = 'WEAK';
-            return { dxyPrice: price, dxyTrend: trend, dxyStrength: strength };
-        } catch(e) {
+            return { dxyPrice: data.price, dxyTrend: trend, dxyStrength: strength };
+        } catch (e) {
             return { dxyPrice: 0, dxyTrend: 'NEUTRAL', dxyStrength: 'NEUTRAL' };
         }
     }
