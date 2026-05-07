@@ -68,16 +68,6 @@
             <input type="password" id="apiKey" class="input-dark text-sm mt-1" placeholder="Paste your Gemini API key">
             <p class="text-[8px] text-slate-500 mt-1">Get free from <a href="https://aistudio.google.com" target="_blank" class="text-indigo-400">aistudio.google.com</a></p>
         </div>
-        <div>
-            <label class="text-[10px] font-bold text-slate-400">📊 ALPHA VANTAGE API KEY (required)</label>
-            <input type="password" id="alphaKey" class="input-dark text-sm mt-1" placeholder="Paste your Alpha Vantage key">
-            <p class="text-[8px] text-slate-500 mt-1">Get free from <a href="https://alphavantage.co/support/#api-key" target="_blank" class="text-indigo-400">alphavantage.co</a></p>
-        </div>
-        <div>
-            <label class="text-[10px] font-bold text-slate-400">📡 TWELVE DATA API KEY (optional – for real‑time WebSocket)</label>
-            <input type="password" id="twelveDataKey" class="input-dark text-sm mt-1" placeholder="Paste your Twelve Data key">
-            <p class="text-[8px] text-slate-500 mt-1">Get free from <a href="https://twelvedata.com" target="_blank" class="text-indigo-400">twelvedata.com</a> – adds real‑time prices for Gold/Silver/Oil</p>
-        </div>
         <div class="grid grid-cols-2 gap-3">
             <div><label class="text-[10px] font-bold text-slate-400">💰 BALANCE ($)</label><input type="number" id="balance" class="input-dark mt-1" value="10000"></div>
             <div><label class="text-[10px] font-bold text-slate-400">⚠️ RISK %</label><input type="number" id="riskPercent" class="input-dark mt-1" value="1.0" step="0.1"></div>
@@ -216,10 +206,8 @@
 <script src="market-data.js"></script>
 <script src="strategy-engine.js"></script>
 <script src="risk-manager.js"></script>
-    <!-- Error log panel (visible only when errors occur) -->
 <div id="errorLog" style="position:fixed; bottom:0; left:0; right:0; background:#1a1a2e; border-top:2px solid #ff4466; color:#ff4466; font-size:10px; padding:8px; max-height:120px; overflow-y:auto; z-index:10000; display:none; font-family:monospace;"></div>
-    <script>
-    // Capture all JavaScript errors and show them on screen
+<script>
     window.onerror = function(message, source, lineno, colno, error) {
         let errorDiv = document.getElementById('errorLog');
         if (errorDiv) {
@@ -228,7 +216,6 @@
         }
         return false;
     };
-    // Also capture console.log/warn/error (optional)
     const originalConsoleError = console.error;
     console.error = function(...args) {
         let errorDiv = document.getElementById('errorLog');
@@ -238,6 +225,6 @@
         }
         originalConsoleError.apply(console, args);
     };
-    </script>
+</script>
 </body>
 </html>
