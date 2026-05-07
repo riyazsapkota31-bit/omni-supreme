@@ -145,11 +145,17 @@ const MarketData = {
             const url = this.BASE_URL + 'dxy.json';
             const res = await fetch(url + '?t=' + Date.now());
             const data = await res.json();
-            if (data.error) return { dxyPrice: 0, dxyTrend: 'NEUTRAL', dxyStrength: 'NEUTRAL' };
+            
+            if (data.error || !data.price) return { dxyPrice: 0, dxyTrend: 'NEUTRAL', dxyStrength: 'NEUTRAL' };
+            
+            // PROXY LOGIC: Compare current USDJPY price to daily open
             let trend = 'NEUTRAL', strength = 'NEUTRAL';
-            if (data.change > 0.3) trend = 'STRONG';
-            else if (data.change < -0.3) trend = 'WEAK';
-            return { dxyPrice: data.price, dxyTrend: trend, dxyStrength: strength };
+            const diff = ((data.price - data.open) / data.open) * 100;
+            
+            if (diff > 0.05) { trend = 'BULLISH 🟢'; strength = 'STRONG'; }
+            else if (diff < -0.05) { trend = 'BEARISH 🔴'; strength = 'WEAK'; }
+            
+            return { dxyPrice: data.price, dxyTrend: trend, dxyStrength: strength, dxyRawDiff: diff };
         } catch (e) {
             return { dxyPrice: 0, dxyTrend: 'NEUTRAL', dxyStrength: 'NEUTRAL' };
         }
