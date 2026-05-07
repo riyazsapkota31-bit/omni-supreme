@@ -1,166 +1,46 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OMNI-SUPREME | Surgical HUD</title>
+    <title>OMNI-BLACK HUD</title>
     <style>
-        :root {
-            --bg: #050505;
-            --card: #111;
-            --accent: #00ff88; /* Surgical Green */
-            --wait: #ffcc00;   /* Warning Yellow */
-            --text: #e0e0e0;
-        }
-
-        body { 
-            background: var(--bg); 
-            color: var(--text); 
-            font-family: 'JetBrains Mono', monospace; 
-            margin: 0; 
-            display: flex; 
-            flex-direction: column; 
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-        }
-
-        .terminal {
-            width: 90%;
-            max-width: 400px;
-            border: 1px solid #333;
-            padding: 20px;
-            background: var(--card);
-            border-radius: 4px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-        }
-
-        .header {
-            border-bottom: 1px solid #333;
-            padding-bottom: 10px;
-            margin-bottom: 20px;
-            display: flex;
-            justify-content: space-between;
-            font-size: 12px;
-            letter-spacing: 2px;
-        }
-
-        #status-indicator {
-            padding: 15px;
-            font-size: 24px;
-            font-weight: bold;
-            text-align: center;
-            border: 1px solid #333;
-            margin-bottom: 20px;
-            transition: all 0.5s ease;
-        }
-
-        .data-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-        }
-
-        .data-item {
-            border: 1px solid #222;
-            padding: 15px;
-            background: #0a0a0a;
-        }
-
-        .label { color: #666; font-size: 10px; margin-bottom: 5px; text-transform: uppercase; }
-        .value { font-size: 18px; color: var(--accent); }
-
-        .footer {
-            margin-top: 20px;
-            font-size: 9px;
-            color: #444;
-            text-align: left;
-        }
-
-        /* Pulsing animation for the HUD */
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.7; }
-            100% { opacity: 1; }
-        }
-        .scanning { animation: pulse 2s infinite; color: var(--wait); }
+        body { background: #000; color: #0f0; font-family: monospace; text-align: center; }
+        .box { border: 1px solid #333; padding: 20px; max-width: 450px; margin: 50px auto; background: #050505; }
+        select, button { background: #111; color: #0f0; border: 1px solid #0f0; padding: 12px; width: 90%; margin: 10px; cursor: pointer; }
+        #signal { display: none; border: 2px solid #0f0; padding: 15px; margin-top: 20px; }
     </style>
 </head>
 <body>
-
-<div class="terminal">
-    <div class="header">
-        <span>SYSTEM: OMNI-V2</span>
-        <span id="sync-dot">● ONLINE</span>
+    <div class="box">
+        <h2>OMNI_SUPREME_v3</h2>
+        <select id="asset">
+            <option value="BTCUSDT">BITCOIN</option>
+            <option value="XAUUSDT">GOLD</option>
+            <option value="EURUSDT">EUR/USD</option>
+            <option value="WTIUSDT">OIL</option>
+        </select>
+        <button onclick="scan()">RUN SURGICAL SCAN</button>
+        <div id="status">Ready.</div>
+        <div id="signal"></div>
     </div>
 
-    <div id="status-indicator" class="scanning">INITIALIZING...</div>
-
-    <div class="data-grid">
-        <div class="data-item">
-            <div class="label">POI TRACKING</div>
-            <div id="poi-level" class="value">--.---</div>
-        </div>
-        <div class="data-item">
-            <div class="label">CONFIDENCE</div>
-            <div id="confidence-score" class="value">0.0</div>
-        </div>
-        <div class="data-item">
-            <div class="label">DXY BIAS</div>
-            <div id="dxy-bias" class="value">CALC...</div>
-        </div>
-        <div class="data-item">
-            <div class="label">XM LOT SIZE</div>
-            <div id="lot-size" class="value">0.00</div>
-        </div>
-    </div>
-
-    <div class="footer">
-        <div>CORE: GEMINI 2.5 FLASH LITE</div>
-        <div id="last-update">READY FOR CRON-JOB PING...</div>
-    </div>
-</div>
-
-<script>
-    async function fetchUpdate() {
-        try {
-            // Append timestamp to bust cache
-            const response = await fetch('status.json?t=' + new Date().getTime());
-            if (!response.ok) throw new Error("Waiting for first sync...");
+    <script>
+        async function scan() {
+            const sym = document.getElementById('asset').value;
+            const res = await fetch('market_history.json');
+            const history = await res.json();
+            const liveRes = await fetch(`https://fapi.binance.com/fapi/v1/ticker/price?symbol=${sym}`);
+            const live = await liveRes.json();
             
-            const data = await response.json();
+            const price = parseFloat(live.price);
+            const low_300 = Math.min(...history[sym].map(x => x.c));
 
-            // Update UI Elements
-            const statusEl = document.getElementById('status-indicator');
-            statusEl.innerText = data.status === "SIGNAL" ? "🎯 ENTRY CONFIRMED" : "⏳ WAIT & WATCH";
-            statusEl.className = ""; // Remove scanning pulse
-            
-            if(data.status === "SIGNAL") {
-                statusEl.style.borderColor = "var(--accent)";
-                statusEl.style.color = "var(--accent)";
+            if (price <= low_300 * 1.008) {
+                document.getElementById('signal').style.display = 'block';
+                document.getElementById('signal').innerHTML = `🎯 SCALP FOUND: ${price}<br>TP: ${(price*1.01).toFixed(4)}`;
             } else {
-                statusEl.style.borderColor = "var(--wait)";
-                statusEl.style.color = "var(--wait)";
+                document.getElementById('status').innerText = "NO ENTRY: LIQUIDITY NOT SWEPT.";
             }
-
-            document.getElementById('poi-level').innerText = "$" + data.poi_level;
-            document.getElementById('confidence-score').innerText = data.confidence + "/10";
-            document.getElementById('dxy-bias').innerText = data.dxy_bias || "SCANNING";
-            document.getElementById('last-update').innerText = "LAST HEARTBEAT: " + (data.last_update || "JUST NOW");
-
-            // Surgical Lot Calculation (Simulated logic matching the Brain)
-            const simulatedLot = (data.confidence > 7) ? "0.05" : "0.01";
-            document.getElementById('lot-size').innerText = simulatedLot;
-
-        } catch (err) {
-            console.log(err.message);
         }
-    }
-
-    // Refresh every 15 seconds to catch the GitHub push quickly
-    setInterval(fetchUpdate, 15000);
-    fetchUpdate();
-</script>
-
+    </script>
 </body>
 </html>
