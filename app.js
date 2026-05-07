@@ -1,6 +1,6 @@
 /**
  * OMNI-SIGNAL - Main Application (credit‑efficient auto tracking)
- * Works with the new multi‑source market-data.js.
+ * Reads static JSON from the data API. Only Gemini key is used for explanations.
  */
 
 const elements = {
@@ -44,18 +44,12 @@ function loadSettings() {
         try {
             const config = JSON.parse(saved);
             if (document.getElementById('apiKey')) document.getElementById('apiKey').value = config.apiKey || '';
-            if (document.getElementById('alphaKey')) document.getElementById('alphaKey').value = config.alphaKey || '';
-            if (document.getElementById('twelveDataKey')) document.getElementById('twelveDataKey').value = config.twelveDataKey || '';
             if (document.getElementById('balance')) document.getElementById('balance').value = config.balance || '10000';
             if (document.getElementById('riskPercent')) document.getElementById('riskPercent').value = config.riskPercent || '1.0';
             if (document.getElementById('modeSelect')) document.getElementById('modeSelect').value = config.mode || 'scalp';
             if (document.getElementById('autoTrackSelect')) document.getElementById('autoTrackSelect').value = config.autoTrack || 'on';
             currentMode = config.mode || 'scalp';
             autoTrackingEnabled = config.autoTrack !== 'off';
-            if (typeof MarketData !== 'undefined') {
-                if (config.alphaKey) MarketData.setAlphaKey(config.alphaKey);
-                if (config.twelveDataKey) MarketData.setTwelveKey(config.twelveDataKey);
-            }
         } catch(e) { console.error('Load settings error:', e); }
     }
 }
@@ -63,18 +57,12 @@ function loadSettings() {
 function saveSettings() {
     const config = {
         apiKey: document.getElementById('apiKey').value,
-        alphaKey: document.getElementById('alphaKey').value,
-        twelveDataKey: document.getElementById('twelveDataKey').value,
         balance: document.getElementById('balance').value,
         riskPercent: document.getElementById('riskPercent').value,
         mode: document.getElementById('modeSelect').value,
         autoTrack: document.getElementById('autoTrackSelect').value
     };
     localStorage.setItem('omni_signal_config', JSON.stringify(config));
-    if (typeof MarketData !== 'undefined') {
-        if (config.alphaKey) MarketData.setAlphaKey(config.alphaKey);
-        if (config.twelveDataKey) MarketData.setTwelveKey(config.twelveDataKey);
-    }
     currentMode = config.mode;
     autoTrackingEnabled = config.autoTrack !== 'off';
     updateAutoTrackStatus();
@@ -212,8 +200,6 @@ async function geminiFinalCheck(apiKey, data, signal) {
 async function analyze() {
     const apiKey = document.getElementById('apiKey').value;
     if (!apiKey) { openDrawer(); showToast('Please enter your Gemini API key', 'error'); return; }
-    const alphaKey = document.getElementById('alphaKey').value;
-    if (!alphaKey) { openDrawer(); showToast('Please enter your Alpha Vantage API key', 'error'); return; }
 
     showLoading(true);
     elements.logicText.textContent = "Fetching market data...";
