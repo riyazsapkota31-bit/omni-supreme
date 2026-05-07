@@ -1,6 +1,6 @@
 /**
- * OMNI-SIGNAL - Main Application (credit‑efficient auto tracking)
- * Reads static JSON from the data API. Only Gemini key is used for explanations.
+ * OMNI-SIGNAL - Main Application (Update 2: DXY & Institutional Confluence)
+ * Reads static JSON from the data API. Uses Gemini for surgical trade validation.
  */
 
 const elements = {
@@ -16,6 +16,7 @@ const elements = {
     currentPrice: document.getElementById('currentPrice'),
     signalBias: document.getElementById('signalBias'),
     confidenceText: document.getElementById('confidenceText'),
+    dxyTrendLabel: document.getElementById('dxyTrendLabel'), // NEW: Added for Update 2
     entryPrice: document.getElementById('entryPrice'),
     stopLoss: document.getElementById('stopLoss'),
     takeProfit: document.getElementById('takeProfit'),
@@ -225,12 +226,20 @@ async function analyze() {
             showToast(`AI filter rejected: ${aiCheck.reason}`, 'warning');
         }
 
+        // --- UPDATE 2: DXY Trend & Confidence Update ---
         elements.signalBias.textContent = currentSignal.bias;
         elements.signalBias.className = `text-7xl font-black italic ${
             currentSignal.bias === 'BUY' ? 'signal-buy' : 
             currentSignal.bias === 'SELL' ? 'signal-sell' : 'signal-wait'
         }`;
         elements.confidenceText.textContent = `${currentSignal.confidence}% confidence`;
+        
+        // Extract DXY Trend from the strategy reasons if available
+        if (elements.dxyTrendLabel) {
+            const dxyStatus = dxyData && dxyData.dxyTrend ? dxyData.dxyTrend : '--';
+            elements.dxyTrendLabel.textContent = `DXY: ${dxyStatus}`;
+            elements.dxyTrendLabel.style.color = dxyStatus.includes('🟢') ? '#00ff88' : dxyStatus.includes('🔴') ? '#ff4466' : '#8a99b0';
+        }
 
         let tradeLevels = null;
         if (currentSignal.bias !== 'WAIT') {
@@ -274,7 +283,7 @@ async function analyze() {
         console.error(error);
         elements.signalBias.textContent = 'ERROR';
         elements.logicText.textContent = `Data fetch failed: ${error.message}`;
-        showToast('Data fetch failed. Multiple APIs attempted.', 'error');
+        showToast('Data fetch failed. Check your API keys and Repository A.', 'error');
     } finally { showLoading(false); }
 }
 
