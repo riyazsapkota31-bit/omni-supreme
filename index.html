@@ -3,57 +3,164 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OMNI-SUPREME HUD</title>
+    <title>OMNI-SUPREME | Surgical HUD</title>
     <style>
-        body { background: #000; color: #fff; font-family: monospace; text-align: center; padding: 20px; }
-        .box { border: 1px solid #333; padding: 20px; margin: 10px; border-radius: 10px; }
-        #status-box { font-size: 24px; font-weight: bold; background: #222; }
-        .label { color: #888; font-size: 12px; }
+        :root {
+            --bg: #050505;
+            --card: #111;
+            --accent: #00ff88; /* Surgical Green */
+            --wait: #ffcc00;   /* Warning Yellow */
+            --text: #e0e0e0;
+        }
+
+        body { 
+            background: var(--bg); 
+            color: var(--text); 
+            font-family: 'JetBrains Mono', monospace; 
+            margin: 0; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        .terminal {
+            width: 90%;
+            max-width: 400px;
+            border: 1px solid #333;
+            padding: 20px;
+            background: var(--card);
+            border-radius: 4px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        .header {
+            border-bottom: 1px solid #333;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            letter-spacing: 2px;
+        }
+
+        #status-indicator {
+            padding: 15px;
+            font-size: 24px;
+            font-weight: bold;
+            text-align: center;
+            border: 1px solid #333;
+            margin-bottom: 20px;
+            transition: all 0.5s ease;
+        }
+
+        .data-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .data-item {
+            border: 1px solid #222;
+            padding: 15px;
+            background: #0a0a0a;
+        }
+
+        .label { color: #666; font-size: 10px; margin-bottom: 5px; text-transform: uppercase; }
+        .value { font-size: 18px; color: var(--accent); }
+
+        .footer {
+            margin-top: 20px;
+            font-size: 9px;
+            color: #444;
+            text-align: left;
+        }
+
+        /* Pulsing animation for the HUD */
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+        .scanning { animation: pulse 2s infinite; color: var(--wait); }
     </style>
 </head>
 <body>
-    <h1>OMNI-SUPREME V2</h1>
-    <div id="status-box" class="box">SCANNING...</div>
-    
-    <div class="box">
-        <div class="label">POI TRACKING LEVEL</div>
-        <div id="poi-level" style="font-size: 30px;">--.---</div>
+
+<div class="terminal">
+    <div class="header">
+        <span>SYSTEM: OMNI-V2</span>
+        <span id="sync-dot">● ONLINE</span>
     </div>
 
-    <div class="box">
-        <div class="label">CONFIDENCE SCORE</div>
-        <div id="confidence-score">0/10</div>
+    <div id="status-indicator" class="scanning">INITIALIZING...</div>
+
+    <div class="data-grid">
+        <div class="data-item">
+            <div class="label">POI TRACKING</div>
+            <div id="poi-level" class="value">--.---</div>
+        </div>
+        <div class="data-item">
+            <div class="label">CONFIDENCE</div>
+            <div id="confidence-score" class="value">0.0</div>
+        </div>
+        <div class="data-item">
+            <div class="label">DXY BIAS</div>
+            <div id="dxy-bias" class="value">CALC...</div>
+        </div>
+        <div class="data-item">
+            <div class="label">XM LOT SIZE</div>
+            <div id="lot-size" class="value">0.00</div>
+        </div>
     </div>
 
-    <div id="last-sync" style="font-size: 10px; color: #444;">Last Sync: Never</div>
+    <div class="footer">
+        <div>CORE: GEMINI 2.5 FLASH LITE</div>
+        <div id="last-update">READY FOR CRON-JOB PING...</div>
+    </div>
+</div>
 
-    <script>
-        async function updateHUD() {
-            try {
-                // Fetching the status.json from your repository
-                const url = 'status.json?t=' + Date.now();
-                const response = await fetch(url);
-                const data = await response.json();
+<script>
+    async function fetchUpdate() {
+        try {
+            // Append timestamp to bust cache
+            const response = await fetch('status.json?t=' + new Date().getTime());
+            if (!response.ok) throw new Error("Waiting for first sync...");
+            
+            const data = await response.json();
 
-                document.getElementById('status-box').innerText = data.status;
-                document.getElementById('poi-level').innerText = "$" + data.poi_level;
-                document.getElementById('confidence-score').innerText = data.confidence + "/10";
-                document.getElementById('last-sync').innerText = "Last Sync: " + data.last_update;
-
-                const statusBox = document.getElementById('status-box');
-                if (data.status === "SIGNAL") {
-                    statusBox.style.backgroundColor = "#00ff88";
-                    statusBox.style.color = "#000";
-                } else {
-                    statusBox.style.backgroundColor = "#ffcc00";
-                    statusBox.style.color = "#000";
-                }
-            } catch (e) {
-                console.log("Awaiting first server push...");
+            // Update UI Elements
+            const statusEl = document.getElementById('status-indicator');
+            statusEl.innerText = data.status === "SIGNAL" ? "🎯 ENTRY CONFIRMED" : "⏳ WAIT & WATCH";
+            statusEl.className = ""; // Remove scanning pulse
+            
+            if(data.status === "SIGNAL") {
+                statusEl.style.borderColor = "var(--accent)";
+                statusEl.style.color = "var(--accent)";
+            } else {
+                statusEl.style.borderColor = "var(--wait)";
+                statusEl.style.color = "var(--wait)";
             }
+
+            document.getElementById('poi-level').innerText = "$" + data.poi_level;
+            document.getElementById('confidence-score').innerText = data.confidence + "/10";
+            document.getElementById('dxy-bias').innerText = data.dxy_bias || "SCANNING";
+            document.getElementById('last-update').innerText = "LAST HEARTBEAT: " + (data.last_update || "JUST NOW");
+
+            // Surgical Lot Calculation (Simulated logic matching the Brain)
+            const simulatedLot = (data.confidence > 7) ? "0.05" : "0.01";
+            document.getElementById('lot-size').innerText = simulatedLot;
+
+        } catch (err) {
+            console.log(err.message);
         }
-        setInterval(updateHUD, 30000);
-        updateHUD();
-    </script>
+    }
+
+    // Refresh every 15 seconds to catch the GitHub push quickly
+    setInterval(fetchUpdate, 15000);
+    fetchUpdate();
+</script>
+
 </body>
 </html>
