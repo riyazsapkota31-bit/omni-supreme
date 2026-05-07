@@ -1,6 +1,6 @@
-// market-data.js (final version for your OMNI‑SIGNAL app)
+// market-data.js – Reads static JSON from your data API (no direct API calls)
 const MarketData = {
-    // !!! CHANGE THIS TO YOUR GITHUB USERNAME IF DIFFERENT !!!
+    // !!! CHANGE <YOUR_USERNAME> TO YOUR GITHUB USERNAME !!!
     API_BASE: 'https://riyazsapkota31-bit.github.io/market-data-api/data/',
 
     assetMap: {
@@ -73,6 +73,12 @@ const MarketData = {
             const response = await fetch(url);
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const json = await response.json();
+
+            // If the JSON contains an error (e.g., from failed API call), return null
+            if (json.error) {
+                console.warn(`Data error for ${xmSymbol}: ${json.error}`);
+                return null;
+            }
 
             const currentPrice = json.price;
             const timestamp = json.timestamp;
