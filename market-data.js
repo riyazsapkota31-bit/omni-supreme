@@ -1,4 +1,4 @@
-// market-data.js – uses historical 5‑min candle array from API
+// market-data.js – reads historical 100‑point array from data API
 const MarketData = {
     BASE_URL: 'https://riyazsapkota31-bit.github.io/market-data-api/data/', // change to your username
 
@@ -28,7 +28,7 @@ const MarketData = {
             }
 
             const currentPrice = json.currentPrice;
-            const prices = json.history;   // array of 100 5‑min closes
+            const prices = json.history;   // array of 100 historical prices
             const hasHistory = prices && prices.length >= 50;
 
             let rsi = 50, ema20 = currentPrice, ema50 = currentPrice, ema200 = currentPrice;
@@ -65,7 +65,7 @@ const MarketData = {
                 multiplier: cfg.multiplier,
                 spread: cfg.spread,
                 class: cfg.class,
-                _source: 'Static API (5‑min history)'
+                _source: 'Static API'
             };
         } catch (err) {
             console.error(`Fetch error for ${symbol}:`, err);
