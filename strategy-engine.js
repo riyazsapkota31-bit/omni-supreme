@@ -1,6 +1,6 @@
 /**
  * STRATEGY ENGINE - OPTIMIZED FOR WIN RATE (55-62% target)
- * Uses confluence of 5 high-probability signals + strict filtering
+ * Update 2: DXY Trend & Confidence Scoring Integrated
  */
 
 const StrategyEngine = {
@@ -34,7 +34,7 @@ const StrategyEngine = {
     
     detectRSIDivergence(data) {
         const { rsi, currentPrice, prevPrice } = data;
-        const priceHigher = currentPrice > prevPrice;
+        const priceHigher = currentPrice > (data.prevClose || currentPrice);
         const rsiHigher = rsi > 50;
         if (!priceHigher && rsiHigher) return { signal: 'BUY', strength: 85, reason: 'Bullish RSI divergence' };
         if (priceHigher && !rsiHigher) return { signal: 'SELL', strength: 85, reason: 'Bearish RSI divergence' };
@@ -44,18 +44,18 @@ const StrategyEngine = {
     detectEMAPullback(data) {
         const { currentPrice, ema20, ema50, trend, volumeSpike } = data;
         const distanceToEMA20 = Math.abs(currentPrice - ema20) / currentPrice * 100;
-        if (trend === 'BULLISH' && currentPrice < ema20 && currentPrice > ema50 && distanceToEMA20 < 0.3 && volumeSpike) {
-            return { signal: 'BUY', strength: 75, reason: 'Bullish EMA pullback with volume' };
+        if (trend === 'BULLISH' && currentPrice < ema20 && currentPrice > ema50 && distanceToEMA20 < 0.3) {
+            return { signal: 'BUY', strength: 75, reason: 'Bullish EMA pullback' };
         }
-        if (trend === 'BEARISH' && currentPrice > ema20 && currentPrice < ema50 && distanceToEMA20 < 0.3 && volumeSpike) {
-            return { signal: 'SELL', strength: 75, reason: 'Bearish EMA pullback with volume' };
+        if (trend === 'BEARISH' && currentPrice > ema20 && currentPrice < ema50 && distanceToEMA20 < 0.3) {
+            return { signal: 'SELL', strength: 75, reason: 'Bearish EMA pullback' };
         }
         return { signal: null, strength: 0 };
     },
     
     detectSupportResistanceBounce(data) {
         const { currentPrice, support, resistance, atr } = data;
-        const atrPercent = atr / currentPrice * 100;
+        const atrPercent = (atr / currentPrice) * 100;
         const isNearSupport = Math.abs(currentPrice - support) / currentPrice * 100 < atrPercent * 0.5;
         const isNearResistance = Math.abs(currentPrice - resistance) / currentPrice * 100 < atrPercent * 0.5;
         if (isNearSupport && data.rsi < 50) return { signal: 'BUY', strength: 80, reason: 'Bounced from support' };
@@ -72,11 +72,11 @@ const StrategyEngine = {
     },
     
     detectFVG(data) {
-        const { currentPrice, ema20, ema50, volumeSpike } = data;
+        const { currentPrice, ema20, ema50 } = data;
         const gap = Math.abs(ema20 - ema50) / ema50 * 100;
-        if (gap > 0.1 && gap < 0.5 && volumeSpike) {
-            if (ema20 > ema50 && currentPrice < ema50) return { signal: 'BUY', strength: 70, reason: 'FVG with volume' };
-            if (ema20 < ema50 && currentPrice > ema50) return { signal: 'SELL', strength: 70, reason: 'FVG with volume' };
+        if (gap > 0.1 && gap < 0.5) {
+            if (ema20 > ema50 && currentPrice < ema50) return { signal: 'BUY', strength: 70, reason: 'FVG Fill' };
+            if (ema20 < ema50 && currentPrice > ema50) return { signal: 'SELL', strength: 70, reason: 'FVG Fill' };
         }
         return { signal: null, strength: 0 };
     },
@@ -117,13 +117,26 @@ const StrategyEngine = {
         if (trend === 'BEARISH') sellScore += 15;
         
         let bias = 'WAIT', confidence = 50, usedStrategy = '';
+        
+        // Confidence Multiplier based on DXY Trend
+        let dxyMultiplier = 1.0;
+        const dxyTrend = config.dxyData ? config.dxyData.dxyTrend : 'NEUTRAL';
+        
+        if (marketData.symbol.includes('USD')) {
+            // Gold/Forex move OPPOSITE to DXY
+            if (buyScore > sellScore && dxyTrend === 'BEARISH 🔴') dxyMultiplier = 1.25; 
+            if (sellScore > buyScore && dxyTrend === 'BULLISH 🟢') dxyMultiplier = 1.25;
+            if (buyScore > sellScore && dxyTrend === 'BULLISH 🟢') dxyMultiplier = 0.5;
+            if (sellScore > buyScore && dxyTrend === 'BEARISH 🔴') dxyMultiplier = 0.5;
+        }
+
         if (buyScore > 120 && buyScore > sellScore) {
             bias = 'BUY';
-            confidence = Math.min(85, 50 + Math.floor(buyScore / 3));
+            confidence = Math.min(95, Math.floor((50 + (buyScore / 3)) * dxyMultiplier));
             usedStrategy = activeReasons.slice(0,2).join(' + ');
         } else if (sellScore > 120 && sellScore > buyScore) {
             bias = 'SELL';
-            confidence = Math.min(85, 50 + Math.floor(sellScore / 3));
+            confidence = Math.min(95, Math.floor((50 + (sellScore / 3)) * dxyMultiplier));
             usedStrategy = activeReasons.slice(0,2).join(' + ');
         }
         
@@ -131,23 +144,14 @@ const StrategyEngine = {
         if (confidence < minConfidence) {
             bias = 'WAIT';
             confidence = 50;
-            usedStrategy = 'Insufficient confidence';
-        }
-        
-        if (config.dxyData && marketData.symbol && marketData.symbol.includes('USD')) {
-            const dxyStrong = config.dxyData.dxyStrength === 'STRONG';
-            const dxyWeak = config.dxyData.dxyStrength === 'WEAK';
-            if ((bias === 'BUY' && dxyStrong) || (bias === 'SELL' && dxyWeak)) {
-                bias = 'WAIT';
-                confidence = 40;
-                usedStrategy = 'DXY conflict';
-            }
+            usedStrategy = dxyMultiplier < 1 ? 'DXY Conflict' : 'Insufficient confidence';
         }
         
         return {
-            bias, confidence,
+            bias, 
+            confidence,
             primaryStrategy: usedStrategy || 'Signal Confluence',
-            conditionsDetected: activeReasons.slice(0,3).join(', '),
+            conditionsDetected: `${activeReasons.slice(0,2).join(', ')} | DXY: ${dxyTrend}`,
             reasons: activeReasons
         };
     }
