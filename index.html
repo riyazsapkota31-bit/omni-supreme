@@ -3,98 +3,57 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OMNI-SUPREME // HUD</title>
+    <title>OMNI-SUPREME HUD</title>
     <style>
-        :root { --bg: #050505; --card: #0a0a0b; --green: #00ff88; --red: #ff4444; --accent: #6366f1; --text: #e0e0e0; }
-        body { background: var(--bg); color: var(--text); font-family: sans-serif; margin: 0; padding: 20px; }
-        #drawer { position: fixed; right: -100%; top: 0; width: 85%; height: 100%; background: var(--card); transition: 0.4s; z-index: 100; padding: 20px; border-left: 1px solid #222; overflow-y: auto; }
-        #drawer.open { right: 0; }
-        .input-field { background: #111; border: 1px solid #222; color: #fff; width: 100%; padding: 12px; margin: 8px 0; border-radius: 8px; box-sizing: border-box; }
-        .save-btn { background: var(--accent); color: white; border: none; padding: 15px; width: 100%; border-radius: 12px; cursor: pointer; font-weight: bold; margin-top: 20px; }
-        .header { display: flex; justify-content: space-between; align-items: center; }
-        .card { background: var(--card); border: 1px solid #111; border-radius: 20px; padding: 20px; margin-top: 20px; text-align: center; }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
-        .value-box { background: #0d0d0f; padding: 15px; border-radius: 12px; border: 1px solid #111; }
-        .label { font-size: 10px; color: #555; text-transform: uppercase; letter-spacing: 1px; }
-        .wait-text { font-size: 4rem; font-weight: 900; color: #1a1a1a; margin: 10px 0; }
+        body { background: #000; color: #fff; font-family: monospace; text-align: center; padding: 20px; }
+        .box { border: 1px solid #333; padding: 20px; margin: 10px; border-radius: 10px; }
+        #status-box { font-size: 24px; font-weight: bold; background: #222; }
+        .label { color: #888; font-size: 12px; }
     </style>
 </head>
 <body>
-
-    <div class="header">
-        <div><h2 style="margin:0;">OMNI-SUPREME</h2><small style="color:var(--accent);">GHOST MONITOR ACTIVE</small></div>
-        <button onclick="toggleDrawer()" style="background:none; border:none; font-size:24px; color:#fff;">⚙️</button>
+    <h1>OMNI-SUPREME V2</h1>
+    <div id="status-box" class="box">SCANNING...</div>
+    
+    <div class="box">
+        <div class="label">POI TRACKING LEVEL</div>
+        <div id="poi-level" style="font-size: 30px;">--.---</div>
     </div>
 
-    <div id="drawer">
-        <h3>⚙️ SETTINGS <span onclick="toggleDrawer()" style="float:right;">×</span></h3>
-        <label class="label">📡 GitHub Token (Sync Key)</label>
-        <input type="password" id="ghToken" class="input-field" placeholder="github_pat_...">
-        <label class="label">🔑 Gemini API Key</label>
-        <input type="password" id="geminiKey" class="input-field">
-        <label class="label">🤖 Telegram Token</label>
-        <input type="password" id="tgToken" class="input-field">
-        <label class="label">🆔 Telegram Chat ID</label>
-        <input type="text" id="tgChat" class="input-field">
-        <div class="grid">
-            <div><label class="label">💰 Balance</label><input type="number" id="balance" class="input-field"></div>
-            <div><label class="label">⚠️ Risk %</label><input type="number" id="risk" class="input-field"></div>
-        </div>
-        <label class="label">🎯 Mode</label>
-        <select id="mode" class="input-field">
-            <option value="SCALPING">SCALPING</option>
-            <option value="DAY_TRADE">DAY TRADE</option>
-        </select>
-        <button class="save-btn" onclick="saveSettings()">SAVE & SECURE</button>
+    <div class="box">
+        <div class="label">CONFIDENCE SCORE</div>
+        <div id="confidence-score">0/10</div>
     </div>
 
-    <div class="card">
-        <div class="wait-text">WAIT</div>
-        <div class="value-box"><div class="label">POI Level</div><div class="value" id="poi-val">SCANNING...</div></div>
-    </div>
+    <div id="last-sync" style="font-size: 10px; color: #444;">Last Sync: Never</div>
 
     <script>
-        function toggleDrawer() { document.getElementById('drawer').classList.toggle('open'); }
-
-        async function saveSettings() {
-            const ghToken = document.getElementById('ghToken').value;
-            const settings = {
-                gemini_api_key: document.getElementById('geminiKey').value,
-                telegram: { token: document.getElementById('tgToken').value, chat_id: document.getElementById('tgChat').value },
-                account: { balance: parseFloat(document.getElementById('balance').value), risk_percent: parseFloat(document.getElementById('risk').value), mode: document.getElementById('mode').value },
-                thresholds: { min_confidence: 6.5 }
-            };
-
-            localStorage.setItem('omni_settings', JSON.stringify(settings));
-            localStorage.setItem('gh_token', ghToken);
-
-            const url = `https://api.github.com/repos/riyazsapkota31-bit/market-data-api/contents/config.json`;
+        async function updateHUD() {
             try {
-                const getFile = await fetch(url, { headers: { 'Authorization': `token ${ghToken}` } });
-                const fileData = await getFile.json();
-                const update = await fetch(url, {
-                    method: 'PUT',
-                    headers: { 'Authorization': `token ${ghToken}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: "Sync", content: btoa(JSON.stringify(settings, null, 2)), sha: fileData.sha })
-                });
-                if(update.ok) alert("✅ Sync Complete."); else alert("❌ Sync Failed.");
-            } catch(e) { alert("Surgical Sync Error."); }
-            toggleDrawer();
-        }
+                // Fetching the status.json from your repository
+                const url = 'status.json?t=' + Date.now();
+                const response = await fetch(url);
+                const data = await response.json();
 
-        window.onload = function() {
-            const saved = JSON.parse(localStorage.getItem('omni_settings'));
-            const tok = localStorage.getItem('gh_token');
-            if(saved) {
-                document.getElementById('geminiKey').value = saved.gemini_api_key;
-                document.getElementById('tgToken').value = saved.telegram.token;
-                document.getElementById('tgChat').value = saved.telegram.chat_id;
-                document.getElementById('balance').value = saved.account.balance;
-                document.getElementById('risk').value = saved.account.risk_percent;
-                document.getElementById('mode').value = saved.account.mode;
-                document.getElementById('ghToken').value = tok;
+                document.getElementById('status-box').innerText = data.status;
+                document.getElementById('poi-level').innerText = "$" + data.poi_level;
+                document.getElementById('confidence-score').innerText = data.confidence + "/10";
+                document.getElementById('last-sync').innerText = "Last Sync: " + data.last_update;
+
+                const statusBox = document.getElementById('status-box');
+                if (data.status === "SIGNAL") {
+                    statusBox.style.backgroundColor = "#00ff88";
+                    statusBox.style.color = "#000";
+                } else {
+                    statusBox.style.backgroundColor = "#ffcc00";
+                    statusBox.style.color = "#000";
+                }
+            } catch (e) {
+                console.log("Awaiting first server push...");
             }
-        };
+        }
+        setInterval(updateHUD, 30000);
+        updateHUD();
     </script>
 </body>
 </html>
