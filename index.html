@@ -1,46 +1,220 @@
 <!DOCTYPE html>
-<html>
+<html lang="en" data-theme="dark">
 <head>
-    <title>OMNI-BLACK HUD</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>OMNI—SIGNAL | XM Edition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
-        body { background: #000; color: #0f0; font-family: monospace; text-align: center; }
-        .box { border: 1px solid #333; padding: 20px; max-width: 450px; margin: 50px auto; background: #050505; }
-        select, button { background: #111; color: #0f0; border: 1px solid #0f0; padding: 12px; width: 90%; margin: 10px; cursor: pointer; }
-        #signal { display: none; border: 2px solid #0f0; padding: 15px; margin-top: 20px; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg-primary: #05080f;
+            --bg-secondary: #0a0f1a;
+            --bg-card: #0f1522;
+            --accent-buy: #00ff88;
+            --accent-sell: #ff4466;
+            --accent-wait: #ffaa00;
+            --accent-primary: #6366f1;
+            --border-subtle: rgba(255,255,255,0.06);
+            --text-primary: #e8edf5;
+            --text-secondary: #8a99b0;
+        }
+        [data-theme="light"] {
+            --bg-primary: #f0f4f8;
+            --bg-secondary: #ffffff;
+            --bg-card: #ffffff;
+            --border-subtle: rgba(0,0,0,0.1);
+            --text-primary: #1a202c;
+            --text-secondary: #4a5568;
+        }
+        body { background: var(--bg-primary); color: var(--text-primary); font-family: 'Inter', sans-serif; padding: 20px; }
+        .card { background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 24px; padding: 20px; margin-bottom: 16px; }
+        .btn { background: linear-gradient(135deg, #6366f1, #4338ca); padding: 14px; border-radius: 16px; font-weight: bold; width: 100%; border: none; color: white; cursor: pointer; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .signal-buy { color: #00ff88; text-shadow: 0 0 20px rgba(0,255,136,0.3); }
+        .signal-sell { color: #ff4466; text-shadow: 0 0 20px rgba(255,68,102,0.3); }
+        .signal-wait { color: #ffaa00; text-shadow: 0 0 20px rgba(255,170,0,0.3); }
+        .input-dark { background: var(--bg-secondary); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 12px; color: var(--text-primary); width: 100%; outline: none; }
+        .input-dark:focus { border-color: var(--accent-primary); }
+        .badge { background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.2); border-radius: 12px; padding: 6px 12px; font-size: 11px; }
+        .overlay { position: fixed; inset: 0; background: rgba(5,8,15,0.95); backdrop-filter: blur(8px); z-index: 1000; display: none; justify-content: center; align-items: center; flex-direction: column; }
+        .drawer { position: fixed; top: 0; right: -100%; width: 320px; height: 100%; background: #0a0f1a; transition: 0.3s; z-index: 1001; border-left: 1px solid rgba(255,255,255,0.1); padding: 24px; overflow-y: auto; }
+        .drawer.open { right: 0; }
+        .toast { position: fixed; bottom: 20px; right: 20px; padding: 12px 20px; border-radius: 12px; font-size: 12px; z-index: 1100; color: white; }
+        .toast-success { background: #10b981; }
+        .toast-error { background: #ef4444; }
+        .toast-info { background: #6366f1; }
+        .auto-track-badge { background: rgba(16,185,129,0.2); border: 1px solid rgba(16,185,129,0.3); border-radius: 20px; padding: 4px 10px; font-size: 9px; color: #10b981; display: inline-flex; align-items: center; gap: 4px; }
+        .theme-toggle { width: 40px; height: 40px; border-radius: 20px; background: var(--bg-card); border: 1px solid var(--border-subtle); cursor: pointer; display: flex; align-items: center; justify-content: center; }
     </style>
 </head>
 <body>
-    <div class="box">
-        <h2>OMNI_SUPREME_v3</h2>
-        <select id="asset">
-            <option value="BTCUSDT">BITCOIN</option>
-            <option value="XAUUSDT">GOLD</option>
-            <option value="EURUSDT">EUR/USD</option>
-            <option value="WTIUSDT">OIL</option>
-        </select>
-        <button onclick="scan()">RUN SURGICAL SCAN</button>
-        <div id="status">Ready.</div>
-        <div id="signal"></div>
+
+<div id="loadingOverlay" class="overlay">
+    <i class="fa-solid fa-microchip fa-4x text-indigo-500 mb-4"></i>
+    <p class="text-indigo-400 font-bold">ANALYZING MARKET...</p>
+</div>
+
+<div id="settingsDrawer" class="drawer">
+    <div class="flex justify-between items-center mb-6">
+        <h3 class="text-lg font-black">⚙️ SETTINGS</h3>
+        <button id="closeSettings" class="text-slate-400 text-xl">&times;</button>
+    </div>
+    <div class="space-y-4">
+        <div>
+            <label class="text-[10px] font-bold text-slate-400">🔑 GEMINI API KEY (required)</label>
+            <input type="password" id="apiKey" class="input-dark text-sm mt-1" placeholder="Paste your Gemini API key">
+            <p class="text-[8px] text-slate-500 mt-1">Get free from <a href="https://aistudio.google.com" target="_blank" class="text-indigo-400">aistudio.google.com</a></p>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+            <div><label class="text-[10px] font-bold text-slate-400">💰 BALANCE ($)</label><input type="number" id="balance" class="input-dark mt-1" value="10000"></div>
+            <div><label class="text-[10px] font-bold text-slate-400">⚠️ RISK %</label><input type="number" id="riskPercent" class="input-dark mt-1" value="1.0" step="0.1"></div>
+        </div>
+        <div>
+            <label class="text-[10px] font-bold text-slate-400">🎯 TRADING MODE</label>
+            <select id="modeSelect" class="input-dark mt-1">
+                <option value="scalp">⚡ SCALPING (1:1.5 - 1:4 RR)</option>
+                <option value="day">📊 DAY TRADING (1:4 - 1:12 RR)</option>
+            </select>
+        </div>
+        <div>
+            <label class="text-[10px] font-bold text-slate-400">🤖 AUTO PRICE TRACKING</label>
+            <select id="autoTrackSelect" class="input-dark mt-1">
+                <option value="on">✅ ON - Auto detect TP/SL hits (uses cached data, no extra API calls)</option>
+                <option value="off">⏸️ OFF - Manual feedback only</option>
+            </select>
+        </div>
+        <button id="saveSettings" class="btn text-sm py-3">SAVE & SECURE</button>
+    </div>
+</div>
+
+<div id="drawerOverlay" class="fixed inset-0 bg-black/70 z-40 hidden" onclick="closeDrawer()"></div>
+
+<div class="max-w-md mx-auto">
+    <div class="flex justify-between items-center mb-6">
+        <div>
+            <h1 class="text-2xl font-black">OMNI—SIGNAL</h1>
+            <p class="text-[8px] text-indigo-400 tracking-wider">XM EDITION | AUTO TRACKING</p>
+        </div>
+        <div class="flex gap-2">
+            <button id="themeToggle" class="theme-toggle"><i class="fa-solid fa-moon"></i></button>
+            <button id="settingsBtn" class="w-10 h-10 bg-white/5 rounded-xl"><i class="fa-solid fa-sliders-h"></i></button>
+        </div>
     </div>
 
-    <script>
-        async function scan() {
-            const sym = document.getElementById('asset').value;
-            const res = await fetch('market_history.json');
-            const history = await res.json();
-            const liveRes = await fetch(`https://fapi.binance.com/fapi/v1/ticker/price?symbol=${sym}`);
-            const live = await liveRes.json();
-            
-            const price = parseFloat(live.price);
-            const low_300 = Math.min(...history[sym].map(x => x.c));
+    <div class="card">
+        <label class="text-[10px] font-bold text-slate-400">📈 SYMBOL</label>
+        <div class="flex gap-2 mt-2">
+            <select id="symbolSelect" class="input-dark flex-1">
+                <optgroup label="Commodities">
+                    <option value="XAUUSD">🪙 GOLD (XAUUSD)</option>
+                    <option value="XAGUSD">🥈 SILVER (XAGUSD)</option>
+                    <option value="OILCash">🛢️ WTI OIL (OILCash)</option>
+                </optgroup>
+                <optgroup label="Forex">
+                    <option value="EURUSD">💶 EUR/USD</option>
+                    <option value="GBPUSD">💷 GBP/USD</option>
+                </optgroup>
+                <optgroup label="Cryptocurrencies">
+                    <option value="BTCUSD">₿ BTC/USD</option>
+                    <option value="ETHUSD">Ξ ETH/USD</option>
+                </optgroup>
+            </select>
+            <button id="analyzeBtn" class="bg-indigo-600 px-4 rounded-xl font-bold text-sm">GO</button>
+        </div>
+    </div>
 
-            if (price <= low_300 * 1.008) {
-                document.getElementById('signal').style.display = 'block';
-                document.getElementById('signal').innerHTML = `🎯 SCALP FOUND: ${price}<br>TP: ${(price*1.01).toFixed(4)}`;
-            } else {
-                document.getElementById('status').innerText = "NO ENTRY: LIQUIDITY NOT SWEPT.";
-            }
+    <div class="card text-center">
+        <div class="flex justify-between items-center mb-2">
+            <p class="text-[10px] text-slate-500">CURRENT PRICE</p>
+            <span id="autoTrackStatus" class="auto-track-badge"><i class="fa-solid fa-satellite-dish"></i> Auto-Tracking ON</span>
+        </div>
+        <p id="currentPrice" class="text-3xl font-bold font-mono">--</p>
+        <p id="updateTime" class="text-[8px] text-slate-600 mt-1">Waiting for data...</p>
+    </div>
+
+    <div class="card text-center">
+        <p class="text-[10px] text-slate-500">TRADE SIGNAL</p>
+        <h1 id="signalBias" class="text-7xl font-black italic signal-wait">WAIT</h1>
+        <p id="confidenceText" class="text-sm text-indigo-400 mt-1">--% confidence</p>
+    </div>
+
+    <div class="card">
+        <div class="grid grid-cols-2 gap-3">
+            <div class="text-center p-2 bg-black/30 rounded-xl"><p class="text-[8px] text-slate-500">ENTRY</p><p id="entryPrice" class="text-lg font-bold">--</p></div>
+            <div class="text-center p-2 bg-black/30 rounded-xl"><p class="text-[8px] text-slate-500">STOP LOSS</p><p id="stopLoss" class="text-lg font-bold text-rose-400">--</p></div>
+            <div class="text-center p-2 bg-black/30 rounded-xl"><p class="text-[8px] text-slate-500">TAKE PROFIT (TP1 / TP2)</p><p id="takeProfit" class="text-lg font-bold text-emerald-400">--</p></div>
+            <div class="text-center p-2 bg-black/30 rounded-xl"><p class="text-[8px] text-slate-500">LOT SIZE</p><p id="lotSize" class="text-lg font-bold text-cyan-400">--</p></div>
+        </div>
+    </div>
+
+    <div class="flex justify-between gap-2 mb-4">
+        <div class="badge">📐 RR: <span id="rrValue">0:0</span></div>
+        <div class="badge">🎯 <span id="tradeType">--</span></div>
+        <div class="badge">🏆 WR: <span id="winRateDisplay">0%</span></div>
+    </div>
+
+    <div class="card bg-indigo-500/5 border-indigo-500/10">
+        <p class="text-[9px] text-indigo-400 font-bold">⚡ SIGNAL LOGIC</p>
+        <p id="logicText" class="text-xs mt-2 leading-relaxed">Click GO to analyze</p>
+    </div>
+
+    <div id="poiBox" class="card hidden bg-amber-500/5 border-amber-500/20">
+        <p class="text-[9px] text-amber-500 font-bold">📍 POINT OF INTEREST</p>
+        <p id="poiLevel" class="text-lg font-bold text-amber-400">--</p>
+        <p id="poiLogic" class="text-[10px] text-slate-400 mt-1">Wait for price to reach this level</p>
+    </div>
+
+    <div class="card mt-4">
+        <div class="flex justify-between items-center mb-3">
+            <h3 class="text-sm font-black">📝 OPEN TRADES</h3>
+            <span class="text-[8px] text-slate-500">Auto-tracking active</span>
+        </div>
+        <div id="openTradesContainer"><p class="text-center text-slate-500 text-xs py-4">No open trades.</p></div>
+    </div>
+
+    <div class="card mt-4">
+        <h3 class="text-sm font-black mb-3">📊 STRATEGY PERFORMANCE</h3>
+        <div id="strategyPerformanceContainer"><p class="text-center text-slate-500 text-xs py-4">Loading...</p></div>
+    </div>
+
+    <div class="card mt-4">
+        <div class="flex justify-between items-center mb-3">
+            <h3 class="text-sm font-black">📜 FEEDBACK HISTORY</h3>
+            <button id="clearFeedbackBtn" class="text-[8px] text-slate-500 hover:text-rose-400">Clear</button>
+        </div>
+        <div id="feedbackHistoryContainer"><p class="text-center text-slate-500 text-xs py-4">No feedback yet.</p></div>
+    </div>
+
+    <p class="text-[8px] text-slate-600 text-center mt-4">⚠️ Educational only. You execute trades on XM.</p>
+</div>
+
+<script src="app.js"></script>
+<script src="feedback.js"></script>
+<script src="market-data.js"></script>
+<script src="strategy-engine.js"></script>
+<script src="risk-manager.js"></script>
+<div id="errorLog" style="position:fixed; bottom:0; left:0; right:0; background:#1a1a2e; border-top:2px solid #ff4466; color:#ff4466; font-size:10px; padding:8px; max-height:120px; overflow-y:auto; z-index:10000; display:none; font-family:monospace;"></div>
+<script>
+    window.onerror = function(message, source, lineno, colno, error) {
+        let errorDiv = document.getElementById('errorLog');
+        if (errorDiv) {
+            errorDiv.style.display = 'block';
+            errorDiv.innerHTML += `[${new Date().toLocaleTimeString()}] ${message}<br>`;
         }
-    </script>
+        return false;
+    };
+    const originalConsoleError = console.error;
+    console.error = function(...args) {
+        let errorDiv = document.getElementById('errorLog');
+        if (errorDiv) {
+            errorDiv.style.display = 'block';
+            errorDiv.innerHTML += `[${new Date().toLocaleTimeString()}] ${args.join(' ')}<br>`;
+        }
+        originalConsoleError.apply(console, args);
+    };
+</script>
 </body>
 </html>
