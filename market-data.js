@@ -1,7 +1,6 @@
-// market-data.js – Reads static JSON from your data API
+// market-data.js – uses historical 5‑min candle array from API
 const MarketData = {
-    // !!! CHANGE THIS TO YOUR USERNAME !!!
-    BASE_URL: 'https://riyazsapkota31-bit.github.io/market-data-api/data/',
+    BASE_URL: 'https://riyazsapkota31-bit.github.io/market-data-api/data/', // change to your username
 
     assetMap: {
         'XAUUSD': { file: 'xauusd', digits: 2, multiplier: 100, spread: 0.20, name: 'Gold', class: 'commodities' },
@@ -11,57 +10,6 @@ const MarketData = {
         'GBPUSD': { file: 'gbpusd', digits: 5, multiplier: 10000, spread: 0.0001, name: 'GBP/USD', class: 'forex' },
         'BTCUSD': { file: 'btcusd', digits: 0, multiplier: 10, spread: 0.50, name: 'Bitcoin', class: 'crypto' },
         'ETHUSD': { file: 'ethusd', digits: 0, multiplier: 10, spread: 0.50, name: 'Ethereum', class: 'crypto' }
-    },
-
-    history: {},
-
-    loadHistory(symbol) {
-        const key = `hist_${symbol}`;
-        const stored = localStorage.getItem(key);
-        this.history[symbol] = stored ? JSON.parse(stored) : [];
-    },
-
-    saveHistory(symbol) {
-        const key = `hist_${symbol}`;
-        const toStore = this.history[symbol].slice(-100);
-        localStorage.setItem(key, JSON.stringify(toStore));
-    },
-
-    addPrice(symbol, price, timestamp) {
-        if (!this.history[symbol]) this.loadHistory(symbol);
-        this.history[symbol].push({ price, timestamp });
-        if (this.history[symbol].length > 100) this.history[symbol].shift();
-        this.saveHistory(symbol);
-    },
-
-    getPrices(symbol) {
-        if (!this.history[symbol]) this.loadHistory(symbol);
-        return this.history[symbol].map(p => p.price);
-    },
-
-    calcRSI(prices, period = 14) {
-        if (prices.length < period + 1) return 50;
-        let gains = 0, losses = 0;
-        for (let i = prices.length - period; i < prices.length - 1; i++) {
-            const diff = prices[i + 1] - prices[i];
-            if (diff > 0) gains += diff;
-            else losses -= diff;
-        }
-        const avgGain = gains / period;
-        const avgLoss = losses / period;
-        if (avgLoss === 0) return 100;
-        const rs = avgGain / avgLoss;
-        return 100 - (100 / (1 + rs));
-    },
-
-    calcEMA(prices, period) {
-        if (prices.length < period) return prices[prices.length - 1];
-        const k = 2 / (period + 1);
-        let ema = prices.slice(0, period).reduce((a, b) => a + b, 0) / period;
-        for (let i = period; i < prices.length; i++) {
-            ema = prices[i] * k + ema * (1 - k);
-        }
-        return ema;
     },
 
     async fetch(symbol) {
@@ -79,12 +27,9 @@ const MarketData = {
                 return null;
             }
 
-            const currentPrice = json.price;
-            const timestamp = json.timestamp;
-
-            this.addPrice(symbol, currentPrice, timestamp);
-            const prices = this.getPrices(symbol);
-            const hasHistory = prices.length >= 50;
+            const currentPrice = json.currentPrice;
+            const prices = json.history;   // array of 100 5‑min closes
+            const hasHistory = prices && prices.length >= 50;
 
             let rsi = 50, ema20 = currentPrice, ema50 = currentPrice, ema200 = currentPrice;
             let support = currentPrice * 0.998, resistance = currentPrice * 1.002;
@@ -94,7 +39,7 @@ const MarketData = {
             let volumeSpike = false;
 
             if (hasHistory) {
-                rsi = this.calcRSI(prices);
+                rsi = this.calcRSI(prices, 14);
                 ema20 = this.calcEMA(prices, 20);
                 ema50 = this.calcEMA(prices, 50);
                 ema200 = this.calcEMA(prices, 200);
@@ -109,31 +54,48 @@ const MarketData = {
 
             return {
                 currentPrice,
-                prevClose: prices.length >= 2 ? prices[prices.length - 2] : currentPrice,
+                prevClose: prices.length >= 2 ? prices[prices.length-2] : currentPrice,
                 dailyChange: json.change || 0,
                 high24h: json.high || currentPrice * 1.005,
                 low24h: json.low || currentPrice * 0.995,
                 volumeSpike,
-                rsi,
-                atr,
-                ema20,
-                ema50,
-                ema200,
-                support,
-                resistance,
-                trend,
-                volatility,
+                rsi, atr, ema20, ema50, ema200, support, resistance, trend, volatility,
                 symbol,
                 digits: cfg.digits,
                 multiplier: cfg.multiplier,
                 spread: cfg.spread,
                 class: cfg.class,
-                _source: 'Static API'
+                _source: 'Static API (5‑min history)'
             };
         } catch (err) {
             console.error(`Fetch error for ${symbol}:`, err);
             return null;
         }
+    },
+
+    calcRSI(prices, period = 14) {
+        if (prices.length < period + 1) return 50;
+        let gains = 0, losses = 0;
+        for (let i = prices.length - period; i < prices.length - 1; i++) {
+            const diff = prices[i+1] - prices[i];
+            if (diff > 0) gains += diff;
+            else losses -= diff;
+        }
+        const avgGain = gains / period;
+        const avgLoss = losses / period;
+        if (avgLoss === 0) return 100;
+        const rs = avgGain / avgLoss;
+        return 100 - (100 / (1 + rs));
+    },
+
+    calcEMA(prices, period) {
+        if (prices.length < period) return prices[prices.length-1];
+        const k = 2 / (period + 1);
+        let ema = prices.slice(0, period).reduce((a,b) => a+b,0) / period;
+        for (let i = period; i < prices.length; i++) {
+            ema = prices[i] * k + ema * (1 - k);
+        }
+        return ema;
     },
 
     async fetchPriceForTracking(symbol) {
@@ -150,8 +112,8 @@ const MarketData = {
             let trend = 'NEUTRAL', strength = 'NEUTRAL';
             if (data.change > 0.3) trend = 'STRONG';
             else if (data.change < -0.3) trend = 'WEAK';
-            return { dxyPrice: data.price, dxyTrend: trend, dxyStrength: strength };
-        } catch (e) {
+            return { dxyPrice: data.currentPrice, dxyTrend: trend, dxyStrength: strength };
+        } catch(e) {
             return { dxyPrice: 0, dxyTrend: 'NEUTRAL', dxyStrength: 'NEUTRAL' };
         }
     }
