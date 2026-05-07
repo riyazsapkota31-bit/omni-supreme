@@ -1,6 +1,6 @@
-// market-data.js (for your main OMNI‑SIGNAL app)
+// market-data.js (final version for your OMNI‑SIGNAL app)
 const MarketData = {
-    // === CHANGE THIS TO YOUR GITHUB USERNAME ===
+    // !!! CHANGE THIS TO YOUR GITHUB USERNAME IF DIFFERENT !!!
     API_BASE: 'https://riyazsapkota31-bit.github.io/market-data-api/data/',
 
     assetMap: {
@@ -13,7 +13,6 @@ const MarketData = {
         'ETHUSD': 'ethusd'
     },
 
-    // --- Price history management (localStorage) ---
     priceHistory: {},
 
     loadPriceHistory(symbol) {
@@ -40,7 +39,6 @@ const MarketData = {
         return this.priceHistory[symbol].map(p => p.price);
     },
 
-    // --- Indicator calculations ---
     calcRSI(prices, period = 14) {
         if (prices.length < period + 1) return 50;
         let gains = 0, losses = 0;
@@ -66,7 +64,6 @@ const MarketData = {
         return ema;
     },
 
-    // --- Main fetch ---
     async fetch(xmSymbol) {
         const file = this.assetMap[xmSymbol];
         if (!file) return null;
@@ -80,12 +77,10 @@ const MarketData = {
             const currentPrice = json.price;
             const timestamp = json.timestamp;
 
-            // Add to history
             this.addPrice(xmSymbol, currentPrice, timestamp);
             const prices = this.getPrices(xmSymbol);
             const hasHistory = prices.length >= 50;
 
-            // Default values (used when not enough history)
             let rsi = 50, ema20 = currentPrice, ema50 = currentPrice, ema200 = currentPrice;
             let support = currentPrice * 0.998, resistance = currentPrice * 1.002;
             let trend = 'SIDEWAYS';
@@ -101,7 +96,6 @@ const MarketData = {
                 resistance = Math.max(...prices.slice(-50)) * 1.002;
                 if (ema20 > ema50 && ema50 > ema200) trend = 'BULLISH';
                 else if (ema20 < ema50 && ema50 < ema200) trend = 'BEARISH';
-                // approximate ATR using daily range from history
                 const recent = prices.slice(-14);
                 atr = (Math.max(...recent) - Math.min(...recent)) / 14;
                 volatility = (atr / currentPrice) * 100;
@@ -124,7 +118,7 @@ const MarketData = {
                 trend,
                 volatility,
                 symbol: xmSymbol,
-                digits: this.assetMap.digits || (xmSymbol.includes('USD') ? 5 : 2),
+                digits: (xmSymbol === 'BTCUSD' || xmSymbol === 'ETHUSD') ? 0 : 5,
                 _source: 'Static Data API'
             };
         } catch (err) {
