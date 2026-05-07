@@ -1,42 +1,41 @@
-// market-data.js – Reads static JSON from your data API (no direct API calls)
+// market-data.js – Reads static JSON, maintains full price history
 const MarketData = {
-    // !!! CHANGE <YOUR_USERNAME> TO YOUR GITHUB USERNAME !!!
-    API_BASE: 'https://riyazsapkota31-bit.github.io/market-data-api/data/',
+    BASE_URL: 'https://YOUR_USERNAME.github.io/market-data-api/data/', // change to your username
 
     assetMap: {
-        'XAUUSD': 'gold',
-        'XAGUSD': 'silver',
-        'OILCash': 'oil',
-        'EURUSD': 'eurusd',
-        'GBPUSD': 'gbpusd',
-        'BTCUSD': 'btcusd',
-        'ETHUSD': 'ethusd'
+        'XAUUSD': { file: 'xauusd', digits: 2, multiplier: 100, name: 'Gold' },
+        'XAGUSD': { file: 'xagusd', digits: 3, multiplier: 100, name: 'Silver' },
+        'OILCash': { file: 'wtiusd', digits: 2, multiplier: 100, name: 'WTI Oil' },
+        'EURUSD': { file: 'eurusd', digits: 5, multiplier: 10000, name: 'EUR/USD' },
+        'GBPUSD': { file: 'gbpusd', digits: 5, multiplier: 10000, name: 'GBP/USD' },
+        'BTCUSD': { file: 'btcusd', digits: 2, multiplier: 10, name: 'Bitcoin' },
+        'ETHUSD': { file: 'ethusd', digits: 2, multiplier: 10, name: 'Ethereum' }
     },
 
-    priceHistory: {},
+    history: {},
 
-    loadPriceHistory(symbol) {
-        const key = `history_${symbol}`;
+    loadHistory(symbol) {
+        const key = `hist_${symbol}`;
         const stored = localStorage.getItem(key);
-        this.priceHistory[symbol] = stored ? JSON.parse(stored) : [];
+        this.history[symbol] = stored ? JSON.parse(stored) : [];
     },
 
-    savePriceHistory(symbol) {
-        const key = `history_${symbol}`;
-        const toStore = this.priceHistory[symbol].slice(-100);
+    saveHistory(symbol) {
+        const key = `hist_${symbol}`;
+        const toStore = this.history[symbol].slice(-100);
         localStorage.setItem(key, JSON.stringify(toStore));
     },
 
     addPrice(symbol, price, timestamp) {
-        if (!this.priceHistory[symbol]) this.loadPriceHistory(symbol);
-        this.priceHistory[symbol].push({ price, timestamp });
-        if (this.priceHistory[symbol].length > 100) this.priceHistory[symbol].shift();
-        this.savePriceHistory(symbol);
+        if (!this.history[symbol]) this.loadHistory(symbol);
+        this.history[symbol].push({ price, timestamp });
+        if (this.history[symbol].length > 100) this.history[symbol].shift();
+        this.saveHistory(symbol);
     },
 
     getPrices(symbol) {
-        if (!this.priceHistory[symbol]) this.loadPriceHistory(symbol);
-        return this.priceHistory[symbol].map(p => p.price);
+        if (!this.history[symbol]) this.loadHistory(symbol);
+        return this.history[symbol].map(p => p.price);
     },
 
     calcRSI(prices, period = 14) {
@@ -64,27 +63,26 @@ const MarketData = {
         return ema;
     },
 
-    async fetch(xmSymbol) {
-        const file = this.assetMap[xmSymbol];
-        if (!file) return null;
+    async fetch(symbol) {
+        const cfg = this.assetMap[symbol];
+        if (!cfg) return null;
 
         try {
-            const url = this.API_BASE + file + '.json';
-            const response = await fetch(url);
+            const url = this.BASE_URL + cfg.file + '.json';
+            const response = await fetch(url + '?t=' + Date.now());
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const json = await response.json();
 
-            // If the JSON contains an error (e.g., from failed API call), return null
             if (json.error) {
-                console.warn(`Data error for ${xmSymbol}: ${json.error}`);
+                console.warn(`Data error for ${symbol}: ${json.error}`);
                 return null;
             }
 
             const currentPrice = json.price;
             const timestamp = json.timestamp;
 
-            this.addPrice(xmSymbol, currentPrice, timestamp);
-            const prices = this.getPrices(xmSymbol);
+            this.addPrice(symbol, currentPrice, timestamp);
+            const prices = this.getPrices(symbol);
             const hasHistory = prices.length >= 50;
 
             let rsi = 50, ema20 = currentPrice, ema50 = currentPrice, ema200 = currentPrice;
@@ -92,6 +90,7 @@ const MarketData = {
             let trend = 'SIDEWAYS';
             let atr = currentPrice * 0.001;
             let volatility = 0.3;
+            let volumeSpike = false; // not provided, skip
 
             if (hasHistory) {
                 rsi = this.calcRSI(prices);
@@ -110,10 +109,10 @@ const MarketData = {
             return {
                 currentPrice,
                 prevClose: prices.length >= 2 ? prices[prices.length-2] : currentPrice,
-                dailyChange: 0,
+                dailyChange: json.change || 0,
                 high24h: json.high || currentPrice * 1.005,
                 low24h: json.low || currentPrice * 0.995,
-                volumeSpike: false,
+                volumeSpike,
                 rsi,
                 atr,
                 ema20,
@@ -123,12 +122,15 @@ const MarketData = {
                 resistance,
                 trend,
                 volatility,
-                symbol: xmSymbol,
-                digits: (xmSymbol === 'BTCUSD' || xmSymbol === 'ETHUSD') ? 0 : 5,
-                _source: 'Static Data API'
+                symbol,
+                digits: cfg.digits,
+                multiplier: cfg.multiplier,
+                spread: { 'XAUUSD':0.20, 'XAGUSD':0.03, 'OILCash':0.03, 'EURUSD':0.0001, 'GBPUSD':0.0001, 'BTCUSD':0.50, 'ETHUSD':0.50 }[symbol],
+                class: symbol.includes('USD') ? (symbol === 'XAUUSD' || symbol === 'XAGUSD' || symbol === 'OILCash' ? 'commodities' : (symbol === 'BTCUSD' || symbol === 'ETHUSD' ? 'crypto' : 'forex')) : 'forex',
+                _source: 'Static API'
             };
         } catch (err) {
-            console.error(`Fetch error for ${xmSymbol}:`, err);
+            console.error(`Fetch error for ${symbol}:`, err);
             return null;
         }
     },
@@ -139,6 +141,19 @@ const MarketData = {
     },
 
     async fetchDXY() {
-        return { dxyPrice: 0, dxyTrend: 'NEUTRAL', dxyStrength: 'NEUTRAL' };
+        try {
+            const url = this.BASE_URL + 'dxy.json';
+            const res = await fetch(url + '?t=' + Date.now());
+            const data = await res.json();
+            if (data.error) return { dxyPrice: 0, dxyTrend: 'NEUTRAL', dxyStrength: 'NEUTRAL' };
+            const price = data.price;
+            // simple trend detection
+            let trend = 'NEUTRAL', strength = 'NEUTRAL';
+            if (data.change > 0.3) trend = 'STRONG';
+            else if (data.change < -0.3) trend = 'WEAK';
+            return { dxyPrice: price, dxyTrend: trend, dxyStrength: strength };
+        } catch(e) {
+            return { dxyPrice: 0, dxyTrend: 'NEUTRAL', dxyStrength: 'NEUTRAL' };
+        }
     }
 };
