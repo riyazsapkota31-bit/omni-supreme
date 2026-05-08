@@ -86,6 +86,19 @@
                 <option value="off">⏸️ OFF - Manual feedback only</option>
             </select>
         </div>
+        
+        <!-- TELEGRAM SECTION START -->
+        <div style="border-top: 1px solid var(--border-subtle); padding-top: 16px;">
+            <label class="text-[10px] font-bold text-slate-400">📨 TELEGRAM ALERTS</label>
+            <div class="space-y-2 mt-1">
+                <input type="password" id="telegramToken" class="input-dark text-sm" placeholder="Bot token from @BotFather">
+                <input type="text" id="telegramChatId" class="input-dark text-sm" placeholder="Chat ID from @userinfobot">
+            </div>
+            <p class="text-[8px] text-slate-500 mt-1">Get token from <a href="https://t.me/BotFather" target="_blank" class="text-indigo-400">@BotFather</a> & chat ID from <a href="https://t.me/userinfobot" target="_blank" class="text-indigo-400">@userinfobot</a></p>
+            <button id="testTelegramBtn" class="bg-[#0088cc] py-3 rounded-xl text-white font-bold text-sm w-full mt-3"><i class="fa-brands fa-telegram"></i> Test Telegram Alert</button>
+        </div>
+        <!-- TELEGRAM SECTION END -->
+        
         <button id="saveSettings" class="btn text-sm py-3">SAVE & SECURE</button>
     </div>
 </div>
