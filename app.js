@@ -354,4 +354,60 @@ async function analyze() {
             elements.tradeType.textContent = currentMode === 'scalp' ? 'SCALP' : 'DAY';
             elements.poiBox.classList.add('hidden');
             if (typeof addOpenTrade === 'function') {
-                const adapted = { ...tradeLevels, takeProfit: tradeLevels.takeProfit
+                const adapted = { ...tradeLevels, takeProfit: tradeLevels.takeProfit2 };
+                addOpenTrade(currentSignal, currentData, adapted);
+            }
+            if (autoTrackingEnabled) startAutoTracking();
+            const geminiText = await getGeminiExplanation(apiKey);
+            const reasoning = currentSignal.reasons?.join(' ') || currentSignal.conditionsDetected || currentSignal.primaryStrategy;
+            elements.logicText.innerHTML = `<span class="text-cyan-400">🎯 ${currentSignal.bias}</span><br>${geminiText || reasoning}`;
+            
+            // ========== SEND TELEGRAM ALERT ==========
+            await sendTelegramAlert(currentSignal, currentData, tradeLevels);
+            // ==========================================
+            
+        } else {
+            elements.entryPrice.textContent = '--';
+            elements.stopLoss.textContent = '--';
+            elements.takeProfit.textContent = '--';
+            elements.lotSize.textContent = '--';
+            elements.rrValue.textContent = '0:0';
+            const poi = currentData.currentPrice;
+            elements.poiLevel.textContent = poi.toFixed(currentData.digits);
+            elements.poiLogic.textContent = currentSignal.reasons?.[0] || 'Insufficient confluence. Wait for better setup.';
+            elements.poiBox.classList.remove('hidden');
+            elements.logicText.innerHTML = `<span class="text-amber-400">⏸️ WAIT MODE</span><br>${currentSignal.primaryStrategy || 'No clear setup'}`;
+        }
+    } catch (error) {
+        console.error(error);
+        elements.signalBias.textContent = 'ERROR';
+        elements.logicText.textContent = `Data fetch failed: ${error.message}`;
+        showToast('Data fetch failed. Multiple APIs attempted.', 'error');
+    } finally { showLoading(false); }
+}
+
+function init() {
+    loadSettings();
+    initTheme();
+    elements.analyzeBtn.addEventListener('click', analyze);
+    elements.settingsBtn.addEventListener('click', openDrawer);
+    elements.closeSettings.addEventListener('click', closeDrawer);
+    elements.saveSettings.addEventListener('click', saveSettings);
+    elements.themeToggle.addEventListener('click', toggleTheme);
+    elements.symbolSelect.addEventListener('change', analyze);
+    
+    // Telegram test button
+    const testTelegramBtn = document.getElementById('testTelegramBtn');
+    if (testTelegramBtn) {
+        testTelegramBtn.addEventListener('click', testTelegramAlert);
+    }
+    
+    setTimeout(() => {
+        if (typeof renderOpenTrades === 'function') renderOpenTrades();
+        if (typeof renderFeedbackHistory === 'function') renderFeedbackHistory();
+        if (typeof updateStrategyPerformance === 'function') updateStrategyPerformance();
+    }, 100);
+    showToast('App ready. Advanced strategy active.', 'info');
+}
+
+init();
