@@ -74,11 +74,11 @@ const MarketData = {
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const json = await response.json();
 
-            if (json.error) {
-                console.warn(`Data error for ${symbol}: ${json.error}`);
-                return null;
+            if (json.error && !json.currentPrice) {
+    console.warn(`Data error for ${symbol}: ${json.error} (no currentPrice)`);
+    return null;
             }
-
+            
             const currentPrice = json.currentPrice;
             const timestamp = json.timestamp;
 
