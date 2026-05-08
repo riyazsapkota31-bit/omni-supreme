@@ -37,6 +37,96 @@ let currentTradeLevels = null;
 let autoTrackInterval = null;
 let autoTrackingEnabled = true;
 
+// ========== TELEGRAM INTEGRATION ==========
+async function sendTelegramAlert(signal, data, tradeLevels) {
+    const token = localStorage.getItem('telegram_bot_token');
+    const chatId = localStorage.getItem('telegram_chat_id');
+    
+    if (!token || !chatId) {
+        console.log('Telegram not configured');
+        return false;
+    }
+    
+    const message = formatTradeMessage(signal, data, tradeLevels);
+    
+    try {
+        const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chat_id: chatId,
+                text: message,
+                parse_mode: 'HTML',
+                disable_notification: false
+            })
+        });
+        
+        const result = await response.json();
+        if (result.ok) {
+            showToast('📨 Alert sent to Telegram!', 'success');
+            return true;
+        } else {
+            console.error('Telegram error:', result);
+            showToast('❌ Telegram failed: Check token/chat ID', 'error');
+            return false;
+        }
+    } catch (error) {
+        console.error('Failed to send:', error);
+        return false;
+    }
+}
+
+function formatTradeMessage(signal, data, tradeLevels) {
+    const timestamp = new Date().toLocaleString();
+    const icon = signal.bias === 'BUY' ? '🟢 BUY' : '🔴 SELL';
+    const stars = '★'.repeat(Math.floor(signal.confidence / 20)) + '☆'.repeat(5 - Math.floor(signal.confidence / 20));
+    
+    return `
+🤖 <b>OMNI-SIGNAL ALERT</b> 🤖
+━━━━━━━━━━━━━━━━━━━
+${icon} | ${stars} ${signal.confidence}%
+⏰ ${timestamp}
+
+📊 <b>${currentSymbol}</b>
+💰 Price: ${data.currentPrice.toFixed(data.digits)}
+📈 RSI: ${data.rsi.toFixed(1)} | Trend: ${data.trend}
+
+━━━━━━━━━━━━━━━━━━━
+🎯 <b>TRADE SETUP</b>
+📥 Entry: ${tradeLevels.entry}
+🛑 Stop Loss: ${tradeLevels.stopLoss}
+🎯 TP1: ${tradeLevels.takeProfit1} | TP2: ${tradeLevels.takeProfit2}
+📐 R:R: 1:${tradeLevels.riskReward || '?'}
+
+💡 ${signal.primaryStrategy || 'Multiple confluence signal'}
+${signal.reasons ? `📝 ${signal.reasons.slice(0,2).join(', ')}` : ''}
+
+⚠️ <i>Not financial advice. Trade at your own risk.</i>
+    `.trim();
+}
+
+async function testTelegramAlert() {
+    const token = localStorage.getItem('telegram_bot_token');
+    const chatId = localStorage.getItem('telegram_chat_id');
+    
+    if (!token || !chatId) {
+        showToast('❌ Please save Telegram settings first', 'error');
+        return false;
+    }
+    
+    const testMsg = await sendTelegramAlert(
+        { bias: 'TEST', confidence: 100, primaryStrategy: 'Test message', reasons: ['Telegram integration working!'] },
+        { currentPrice: 1.36210, digits: 5, rsi: 55, trend: 'TEST' },
+        { entry: 1.36200, stopLoss: 1.36100, takeProfit1: 1.36300, takeProfit2: 1.36400, riskReward: 2.0 }
+    );
+    
+    if (testMsg) {
+        showToast('✅ Telegram test sent! Check your Telegram', 'success');
+    }
+    return testMsg;
+}
+// ========== END TELEGRAM INTEGRATION ==========
+
 function loadSettings() {
     const saved = localStorage.getItem('omni_signal_config');
     if (saved) {
@@ -51,6 +141,14 @@ function loadSettings() {
             autoTrackingEnabled = config.autoTrack !== 'off';
         } catch(e) { console.error('Load settings error:', e); }
     }
+    
+    // Load Telegram settings
+    const telegramToken = localStorage.getItem('telegram_bot_token');
+    const telegramChatId = localStorage.getItem('telegram_chat_id');
+    if (document.getElementById('telegramToken')) {
+        document.getElementById('telegramToken').value = telegramToken || '';
+        document.getElementById('telegramChatId').value = telegramChatId || '';
+    }
 }
 
 function saveSettings() {
@@ -62,6 +160,13 @@ function saveSettings() {
         autoTrack: document.getElementById('autoTrackSelect').value
     };
     localStorage.setItem('omni_signal_config', JSON.stringify(config));
+    
+    // Save Telegram settings
+    const telegramToken = document.getElementById('telegramToken').value;
+    const telegramChatId = document.getElementById('telegramChatId').value;
+    if (telegramToken) localStorage.setItem('telegram_bot_token', telegramToken);
+    if (telegramChatId) localStorage.setItem('telegram_chat_id', telegramChatId);
+    
     currentMode = config.mode;
     autoTrackingEnabled = config.autoTrack !== 'off';
     updateAutoTrackStatus();
@@ -245,51 +350,8 @@ async function analyze() {
             const reward = Math.abs(tradeLevels.takeProfit2 - tradeLevels.entry);
             const rr = risk > 0 ? (reward / risk).toFixed(1) : 0;
             elements.rrValue.textContent = `1:${rr}`;
+            tradeLevels.riskReward = rr;
             elements.tradeType.textContent = currentMode === 'scalp' ? 'SCALP' : 'DAY';
             elements.poiBox.classList.add('hidden');
             if (typeof addOpenTrade === 'function') {
-                const adapted = { ...tradeLevels, takeProfit: tradeLevels.takeProfit2 };
-                addOpenTrade(currentSignal, currentData, adapted);
-            }
-            if (autoTrackingEnabled) startAutoTracking();
-            const geminiText = await getGeminiExplanation(apiKey);
-            const reasoning = currentSignal.reasons?.join(' ') || currentSignal.conditionsDetected || currentSignal.primaryStrategy;
-            elements.logicText.innerHTML = `<span class="text-cyan-400">🎯 ${currentSignal.bias}</span><br>${geminiText || reasoning}`;
-        } else {
-            elements.entryPrice.textContent = '--';
-            elements.stopLoss.textContent = '--';
-            elements.takeProfit.textContent = '--';
-            elements.lotSize.textContent = '--';
-            elements.rrValue.textContent = '0:0';
-            const poi = currentData.currentPrice;
-            elements.poiLevel.textContent = poi.toFixed(currentData.digits);
-            elements.poiLogic.textContent = currentSignal.reasons?.[0] || 'Insufficient confluence. Wait for better setup.';
-            elements.poiBox.classList.remove('hidden');
-            elements.logicText.innerHTML = `<span class="text-amber-400">⏸️ WAIT MODE</span><br>${currentSignal.primaryStrategy || 'No clear setup'}`;
-        }
-    } catch (error) {
-        console.error(error);
-        elements.signalBias.textContent = 'ERROR';
-        elements.logicText.textContent = `Data fetch failed: ${error.message}`;
-        showToast('Data fetch failed. Multiple APIs attempted.', 'error');
-    } finally { showLoading(false); }
-}
-
-function init() {
-    loadSettings();
-    initTheme();
-    elements.analyzeBtn.addEventListener('click', analyze);
-    elements.settingsBtn.addEventListener('click', openDrawer);
-    elements.closeSettings.addEventListener('click', closeDrawer);
-    elements.saveSettings.addEventListener('click', saveSettings);
-    elements.themeToggle.addEventListener('click', toggleTheme);
-    elements.symbolSelect.addEventListener('change', analyze);
-    setTimeout(() => {
-        if (typeof renderOpenTrades === 'function') renderOpenTrades();
-        if (typeof renderFeedbackHistory === 'function') renderFeedbackHistory();
-        if (typeof updateStrategyPerformance === 'function') updateStrategyPerformance();
-    }, 100);
-    showToast('App ready. Advanced strategy active.', 'info');
-}
-
-init();
+                const adapted = { ...tradeLevels, takeProfit: tradeLevels.takeProfit
