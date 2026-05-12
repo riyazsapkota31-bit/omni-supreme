@@ -47,6 +47,9 @@ function getChartFileName(symbol) {
         'EURUSD': 'eurusd',
         'GBPUSD': 'gbpusd',
         'USDJPY': 'usdjpy',
+        'USDCAD': 'usdcad',
+        'USDCHF': 'usdchf',
+        'USDSEK': 'usdsek',
         'SOLUSD': 'solusd'
     };
     return map[symbol] || 'xauusd';
@@ -104,7 +107,6 @@ function aggregateCandles(candles, minutes) {
 function renderChart() {
     if (!chart) return;
     
-    // Clear existing series
     chart.clear();
     
     const candleSeries = chart.addSeries(LightweightCharts.CandlestickSeries, {
