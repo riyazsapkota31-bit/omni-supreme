@@ -1,5 +1,5 @@
 /**
- * OMNI-SIGNAL - Main Application (credit‑efficient auto tracking)
+ * OMNI-SIGNAL - Main Application
  */
 
 const elements = {
@@ -43,7 +43,7 @@ function loadSettings() {
         try {
             const config = JSON.parse(saved);
             if (document.getElementById('apiKey')) document.getElementById('apiKey').value = config.apiKey || '';
-            if (document.getElementById('balance')) document.getElementById('balance').value = config.balance || '10000';
+            if (document.getElementById('balance')) document.getElementById('balance').value = config.balance || '7200';
             if (document.getElementById('riskPercent')) document.getElementById('riskPercent').value = config.riskPercent || '1.0';
             if (document.getElementById('modeSelect')) document.getElementById('modeSelect').value = config.mode || 'scalp';
             if (document.getElementById('autoTrackSelect')) document.getElementById('autoTrackSelect').value = config.autoTrack || 'on';
@@ -284,10 +284,23 @@ function init() {
     elements.saveSettings.addEventListener('click', saveSettings);
     elements.themeToggle.addEventListener('click', toggleTheme);
     elements.symbolSelect.addEventListener('change', analyze);
+    
+    // Chart symbol selector
+    const chartSymbolSelect = document.getElementById('chartSymbolSelect');
+    if (chartSymbolSelect) {
+        chartSymbolSelect.addEventListener('change', (e) => {
+            if (typeof loadChartData === 'function') {
+                window.currentChartSymbol = e.target.value;
+                loadChartData();
+            }
+        });
+    }
+    
     setTimeout(() => {
         if (typeof renderOpenTrades === 'function') renderOpenTrades();
         if (typeof renderFeedbackHistory === 'function') renderFeedbackHistory();
         if (typeof updateStrategyPerformance === 'function') updateStrategyPerformance();
+        if (typeof initChart === 'function') initChart();
     }, 100);
     showToast('App ready. Advanced strategy active.', 'info');
 }
