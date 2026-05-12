@@ -1,4 +1,4 @@
-// chart.js – Live candlestick chart with auto-refresh
+// chart.js – Lightweight Charts with robust initialization
 
 let chartInstance = null;
 let candleSeriesInstance = null;
@@ -6,47 +6,65 @@ let currentChartSymbol = 'XAUUSD';
 let currentInterval = '5';
 
 document.addEventListener('DOMContentLoaded', () => {
-    initChart();
-    attachEventListeners();
-    
-    // Auto-refresh every 2 minutes (120000 ms)
-    setInterval(() => {
-        if (typeof loadChartData === 'function') {
-            loadChartData();
-        }
-    }, 120000);
+    // Wait a moment to ensure the library is loaded
+    setTimeout(() => {
+        initChart();
+        attachEventListeners();
+        
+        // Auto-refresh every 2 minutes
+        setInterval(() => {
+            if (typeof loadChartData === 'function') {
+                loadChartData();
+            }
+        }, 120000);
+    }, 100);
 });
 
 function initChart() {
     const container = document.getElementById('chart-container');
     if (!container) {
-        console.error('No chart container');
+        console.error('Chart container missing');
         return;
     }
-
-    if (chartInstance) {
-        chartInstance.remove();
-        chartInstance = null;
-        candleSeriesInstance = null;
+    
+    // Check if LightweightCharts is available
+    if (typeof LightweightCharts === 'undefined') {
+        console.error('LightweightCharts library not loaded');
+        return;
     }
-
-    chartInstance = LightweightCharts.createChart(container, {
-        width: container.clientWidth,
-        height: 400,
-        layout: {
-            background: { color: '#0f1522' },
-            textColor: '#e8edf5',
-        },
-        grid: {
-            vertLines: { color: '#1a2030' },
-            horzLines: { color: '#1a2030' },
-        },
-        crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
-        rightPriceScale: { borderColor: '#2a2e38' },
-        timeScale: { borderColor: '#2a2e38', timeVisible: true, secondsVisible: false },
-    });
-
-    loadChartData();
+    
+    // Destroy existing chart
+    if (chartInstance && typeof chartInstance.remove === 'function') {
+        chartInstance.remove();
+    }
+    chartInstance = null;
+    candleSeriesInstance = null;
+    
+    try {
+        chartInstance = LightweightCharts.createChart(container, {
+            width: container.clientWidth,
+            height: 400,
+            layout: {
+                background: { color: '#0f1522' },
+                textColor: '#e8edf5',
+            },
+            grid: {
+                vertLines: { color: '#1a2030' },
+                horzLines: { color: '#1a2030' },
+            },
+            crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+            rightPriceScale: { borderColor: '#2a2e38' },
+            timeScale: { borderColor: '#2a2e38', timeVisible: true, secondsVisible: false },
+        });
+        
+        if (!chartInstance || typeof chartInstance.addSeries !== 'function') {
+            throw new Error('Chart creation failed');
+        }
+        
+        loadChartData();
+    } catch (err) {
+        console.error('Chart init error:', err);
+    }
 }
 
 function attachEventListeners() {
@@ -63,9 +81,11 @@ function attachEventListeners() {
     }
     // Resize
     window.addEventListener('resize', () => {
-        if (chartInstance) {
+        if (chartInstance && typeof chartInstance.applyOptions === 'function') {
             const container = document.getElementById('chart-container');
-            chartInstance.applyOptions({ width: container.clientWidth });
+            if (container) {
+                chartInstance.applyOptions({ width: container.clientWidth });
+            }
         }
     });
 }
@@ -100,6 +120,12 @@ function getFileName(symbol) {
 }
 
 async function loadChartData() {
+    if (!chartInstance || typeof chartInstance.addSeries !== 'function') {
+        console.warn('Chart not ready, retrying init...');
+        initChart();
+        return;
+    }
+    
     const fileName = getFileName(currentChartSymbol);
     const url = `https://riyazsapkota31-bit.github.io/market-data-api/data/${fileName}.json?t=${Date.now()}`;
     try {
@@ -144,7 +170,7 @@ function aggregateCandles(candles, interval) {
 }
 
 function renderChart(data) {
-    if (!chartInstance) return;
+    if (!chartInstance || typeof chartInstance.removeSeries !== 'function') return;
     if (candleSeriesInstance) {
         chartInstance.removeSeries(candleSeriesInstance);
     }
