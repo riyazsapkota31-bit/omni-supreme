@@ -1,47 +1,93 @@
-// chart.js – Lightweight Charts with robust initialization
+// chart.js – Recreate chart on each data load (avoids addSeries errors)
 
-let chartInstance = null;
-let candleSeriesInstance = null;
 let currentChartSymbol = 'XAUUSD';
 let currentInterval = '5';
+let refreshInterval = null;
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Wait a moment to ensure the library is loaded
+    // Wait a moment for the library to load
     setTimeout(() => {
-        initChart();
-        attachEventListeners();
+        loadAndRenderChart();
+        setupEventListeners();
         
         // Auto-refresh every 2 minutes
-        setInterval(() => {
-            if (typeof loadChartData === 'function') {
-                loadChartData();
-            }
+        if (refreshInterval) clearInterval(refreshInterval);
+        refreshInterval = setInterval(() => {
+            loadAndRenderChart();
         }, 120000);
-    }, 100);
+    }, 200);
 });
 
-function initChart() {
+function setupEventListeners() {
+    // Timeframe buttons
+    document.querySelectorAll('.timeframe-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            document.querySelectorAll('.timeframe-btn').forEach(b => b.classList.remove('bg-indigo-600'));
+            e.target.classList.add('bg-indigo-600');
+            currentInterval = e.target.dataset.interval;
+            loadAndRenderChart();
+        });
+    });
+    
+    // Asset selector
+    const selector = document.getElementById('chartSymbolSelect');
+    if (selector) {
+        selector.addEventListener('change', (e) => {
+            currentChartSymbol = e.target.value;
+            loadAndRenderChart();
+        });
+    }
+}
+
+function getFileName(symbol) {
+    const map = {
+        'XAUUSD': 'xauusd',
+        'XAGUSD': 'xagusd',
+        'BTCUSD': 'btcusd',
+        'ETHUSD': 'ethusd',
+        'EURUSD': 'eurusd',
+        'GBPUSD': 'gbpusd',
+        'USDJPY': 'usdjpy',
+        'USDCAD': 'usdcad',
+        'USDCHF': 'usdchf',
+        'USDSEK': 'usdsek',
+        'SOLUSD': 'solusd'
+    };
+    return map[symbol] || 'xauusd';
+}
+
+async function loadAndRenderChart() {
     const container = document.getElementById('chart-container');
-    if (!container) {
-        console.error('Chart container missing');
-        return;
-    }
+    if (!container) return;
     
-    // Check if LightweightCharts is available
-    if (typeof LightweightCharts === 'undefined') {
-        console.error('LightweightCharts library not loaded');
-        return;
-    }
-    
-    // Destroy existing chart
-    if (chartInstance && typeof chartInstance.remove === 'function') {
-        chartInstance.remove();
-    }
-    chartInstance = null;
-    candleSeriesInstance = null;
+    const fileName = getFileName(currentChartSymbol);
+    const url = `https://riyazsapkota31-bit.github.io/market-data-api/data/${fileName}.json?t=${Date.now()}`;
     
     try {
-        chartInstance = LightweightCharts.createChart(container, {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        if (!data.candles || data.candles.length === 0) {
+            console.warn('No candle data');
+            return;
+        }
+        
+        const chartData = aggregateCandles(data.candles, currentInterval);
+        
+        // Completely remove old chart and create a new one
+        if (container.firstChild) {
+            while (container.firstChild) {
+                container.removeChild(container.firstChild);
+            }
+        }
+        
+        // Check if library is loaded
+        if (typeof LightweightCharts === 'undefined') {
+            console.error('LightweightCharts not loaded');
+            return;
+        }
+        
+        const chart = LightweightCharts.createChart(container, {
             width: container.clientWidth,
             height: 400,
             layout: {
@@ -57,89 +103,26 @@ function initChart() {
             timeScale: { borderColor: '#2a2e38', timeVisible: true, secondsVisible: false },
         });
         
-        if (!chartInstance || typeof chartInstance.addSeries !== 'function') {
-            throw new Error('Chart creation failed');
-        }
+        const candleSeries = chart.addSeries(LightweightCharts.CandlestickSeries, {
+            upColor: '#00ff88',
+            downColor: '#ff4466',
+            borderVisible: false,
+            wickUpColor: '#00ff88',
+            wickDownColor: '#ff4466',
+        });
         
-        loadChartData();
+        candleSeries.setData(chartData);
+        chart.timeScale().fitContent();
+        
+        // Handle window resize
+        const resizeHandler = () => {
+            chart.applyOptions({ width: container.clientWidth });
+        };
+        window.removeEventListener('resize', resizeHandler);
+        window.addEventListener('resize', resizeHandler);
+        
     } catch (err) {
-        console.error('Chart init error:', err);
-    }
-}
-
-function attachEventListeners() {
-    // Timeframe buttons
-    document.querySelectorAll('.timeframe-btn').forEach(btn => {
-        btn.removeEventListener('click', handleTimeframeClick);
-        btn.addEventListener('click', handleTimeframeClick);
-    });
-    // Asset selector
-    const selector = document.getElementById('chartSymbolSelect');
-    if (selector) {
-        selector.removeEventListener('change', handleSymbolChange);
-        selector.addEventListener('change', handleSymbolChange);
-    }
-    // Resize
-    window.addEventListener('resize', () => {
-        if (chartInstance && typeof chartInstance.applyOptions === 'function') {
-            const container = document.getElementById('chart-container');
-            if (container) {
-                chartInstance.applyOptions({ width: container.clientWidth });
-            }
-        }
-    });
-}
-
-function handleTimeframeClick(e) {
-    document.querySelectorAll('.timeframe-btn').forEach(btn => btn.classList.remove('bg-indigo-600'));
-    e.target.classList.add('bg-indigo-600');
-    currentInterval = e.target.dataset.interval;
-    loadChartData();
-}
-
-function handleSymbolChange(e) {
-    currentChartSymbol = e.target.value;
-    loadChartData();
-}
-
-function getFileName(symbol) {
-    const mapping = {
-        'XAUUSD': 'xauusd',
-        'XAGUSD': 'xagusd',
-        'BTCUSD': 'btcusd',
-        'ETHUSD': 'ethusd',
-        'EURUSD': 'eurusd',
-        'GBPUSD': 'gbpusd',
-        'USDJPY': 'usdjpy',
-        'USDCAD': 'usdcad',
-        'USDCHF': 'usdchf',
-        'USDSEK': 'usdsek',
-        'SOLUSD': 'solusd'
-    };
-    return mapping[symbol] || 'xauusd';
-}
-
-async function loadChartData() {
-    if (!chartInstance || typeof chartInstance.addSeries !== 'function') {
-        console.warn('Chart not ready, retrying init...');
-        initChart();
-        return;
-    }
-    
-    const fileName = getFileName(currentChartSymbol);
-    const url = `https://riyazsapkota31-bit.github.io/market-data-api/data/${fileName}.json?t=${Date.now()}`;
-    try {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
-        if (!data.candles || data.candles.length === 0) {
-            console.warn('No candles');
-            return;
-        }
-        const chartData = aggregateCandles(data.candles, currentInterval);
-        renderChart(chartData);
-    } catch (err) {
-        console.error('Chart data error:', err);
+        console.error('Chart error:', err);
     }
 }
 
@@ -157,7 +140,7 @@ function aggregateCandles(candles, interval) {
     const result = [];
     for (let i = 0; i < candles.length; i += groupSize) {
         const group = candles.slice(i, i + groupSize);
-        if (!group.length) continue;
+        if (group.length === 0) continue;
         result.push({
             time: Math.floor(group[0].timestamp / 1000),
             open: group[0].open,
@@ -168,23 +151,3 @@ function aggregateCandles(candles, interval) {
     }
     return result;
 }
-
-function renderChart(data) {
-    if (!chartInstance || typeof chartInstance.removeSeries !== 'function') return;
-    if (candleSeriesInstance) {
-        chartInstance.removeSeries(candleSeriesInstance);
-    }
-    candleSeriesInstance = chartInstance.addSeries(LightweightCharts.CandlestickSeries, {
-        upColor: '#00ff88',
-        downColor: '#ff4466',
-        borderVisible: false,
-        wickUpColor: '#00ff88',
-        wickDownColor: '#ff4466',
-    });
-    candleSeriesInstance.setData(data);
-    chartInstance.timeScale().fitContent();
-}
-
-// Expose for external calls
-window.loadChartData = loadChartData;
-window.initChart = initChart;
