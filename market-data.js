@@ -1,19 +1,29 @@
-// market-data.js – Reads static JSON from data API, accumulates price history
+// market-data.js – Reads OHLC candles from data API (13 assets)
 const MarketData = {
-    // !!! CHANGE THIS TO YOUR GITHUB USERNAME !!!
     BASE_URL: 'https://riyazsapkota31-bit.github.io/market-data-api/data/',
 
     assetMap: {
-        'XAUUSD': { file: 'xauusd', digits: 2, multiplier: 100, spread: 0.20, name: 'Gold', class: 'commodities' },
-        'XAGUSD': { file: 'xagusd', digits: 3, multiplier: 100, spread: 0.03, name: 'Silver', class: 'commodities' },
-        'OILCash': { file: 'wtiusd', digits: 2, multiplier: 100, spread: 0.03, name: 'WTI Oil', class: 'commodities' },
-        'EURUSD': { file: 'eurusd', digits: 5, multiplier: 10000, spread: 0.0001, name: 'EUR/USD', class: 'forex' },
-        'GBPUSD': { file: 'gbpusd', digits: 5, multiplier: 10000, spread: 0.0001, name: 'GBP/USD', class: 'forex' },
-        'BTCUSD': { file: 'btcusd', digits: 0, multiplier: 10, spread: 0.50, name: 'Bitcoin', class: 'crypto' },
-        'ETHUSD': { file: 'ethusd', digits: 0, multiplier: 10, spread: 0.50, name: 'Ethereum', class: 'crypto' }
+        // Commodities
+        'XAUUSD': { file: 'xauusd', digits: 2, multiplier: 100, spread: 0.040, name: 'Gold', class: 'commodities' },
+        'XAGUSD': { file: 'xagusd', digits: 3, multiplier: 100, spread: 0.030, name: 'Silver', class: 'commodities' },
+        'OILCash': { file: 'wtiusd', digits: 2, multiplier: 100, spread: 0.030, name: 'WTI Oil', class: 'commodities' },
+        
+        // Forex (6 pairs)
+        'EURUSD': { file: 'eurusd', digits: 5, multiplier: 10000, spread: 0.00016, name: 'EUR/USD', class: 'forex' },
+        'GBPUSD': { file: 'gbpusd', digits: 5, multiplier: 10000, spread: 0.00019, name: 'GBP/USD', class: 'forex' },
+        'USDJPY': { file: 'usdjpy', digits: 3, multiplier: 100, spread: 0.03, name: 'USD/JPY', class: 'forex' },
+        'USDCAD': { file: 'usdcad', digits: 5, multiplier: 10000, spread: 0.00015, name: 'USD/CAD', class: 'forex' },
+        'USDCHF': { file: 'usdchf', digits: 5, multiplier: 10000, spread: 0.00015, name: 'USD/CHF', class: 'forex' },
+        'USDSEK': { file: 'usdsek', digits: 5, multiplier: 10000, spread: 0.0003, name: 'USD/SEK', class: 'forex' },
+        
+        // Crypto
+        'BTCUSD': { file: 'btcusd', digits: 0, multiplier: 10, spread: 75.00, name: 'Bitcoin', class: 'crypto' },
+        'ETHUSD': { file: 'ethusd', digits: 0, multiplier: 10, spread: 6.00, name: 'Ethereum', class: 'crypto' },
+        'SOLUSD': { file: 'solusd', digits: 2, multiplier: 10, spread: 0.50, name: 'Solana', class: 'crypto' }
     },
 
     history: {},
+    candleCache: {},
 
     loadHistory(symbol) {
         const key = `hist_${symbol}`;
@@ -75,23 +85,31 @@ const MarketData = {
             const json = await response.json();
 
             if (json.error && !json.currentPrice) {
-    console.warn(`Data error for ${symbol}: ${json.error} (no currentPrice)`);
-    return null;
+                console.warn(`Data error for ${symbol}: ${json.error}`);
+                return null;
             }
             
             const currentPrice = json.currentPrice;
             const timestamp = json.timestamp;
-
-            // If the JSON contains a full history array (e.g., crypto, DXY, oil), use it immediately
-            let prices = json.history;
-            if (prices && prices.length >= 50) {
-                // Replace local history with this full array
-                this.history[symbol] = prices.map(p => ({ price: p, timestamp: json.timestamp }));
-                this.saveHistory(symbol);
+            
+            // Read OHLC candles
+            let candles = json.candles || [];
+            let prices = [];
+            
+            if (candles.length > 0) {
+                prices = candles.map(c => c.close);
+                this.candleCache[symbol] = candles;
             } else {
-                // Otherwise accumulate one point at a time
-                this.addPrice(symbol, currentPrice, timestamp);
-                prices = this.getPrices(symbol);
+                // Fallback to old format
+                let oldPrices = json.history;
+                if (oldPrices && oldPrices.length >= 50) {
+                    this.history[symbol] = oldPrices.map(p => ({ price: p, timestamp: json.timestamp }));
+                    this.saveHistory(symbol);
+                } else {
+                    this.addPrice(symbol, currentPrice, timestamp);
+                    oldPrices = this.getPrices(symbol);
+                }
+                prices = oldPrices;
             }
 
             const hasHistory = prices.length >= 50;
@@ -126,6 +144,7 @@ const MarketData = {
                 volumeSpike,
                 rsi, atr, ema20, ema50, ema200, support, resistance, trend, volatility,
                 symbol, digits: cfg.digits, multiplier: cfg.multiplier, spread: cfg.spread, class: cfg.class,
+                candles: candles,
                 _source: 'Static API'
             };
         } catch (err) {
@@ -145,7 +164,6 @@ const MarketData = {
             const res = await fetch(url + '?t=' + Date.now());
             const data = await res.json();
             if (data.error) return { dxyPrice: 0, dxyTrend: 'NEUTRAL', dxyStrength: 'NEUTRAL' };
-            // Simple trend detection (you can adjust thresholds)
             let trend = 'NEUTRAL', strength = 'NEUTRAL';
             if (data.change > 0.3) trend = 'STRONG';
             else if (data.change < -0.3) trend = 'WEAK';
