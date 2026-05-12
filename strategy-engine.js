@@ -83,10 +83,10 @@ const StrategyEngine = {
         if (trend === 'BEARISH') sellScore += 15;
 
         let bias = 'WAIT', confidence = 50;
-        if (buyScore > 120 && buyScore > sellScore) {
+        if (buyScore > 80 && buyScore > sellScore) {
             bias = 'BUY';
             confidence = Math.min(85, 50 + Math.floor(buyScore / 3));
-        } else if (sellScore > 120 && sellScore > buyScore) {
+        } else if (sellScore > 80 && sellScore > buyScore) {
             bias = 'SELL';
             confidence = Math.min(85, 50 + Math.floor(sellScore / 3));
         }
