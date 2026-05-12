@@ -7,6 +7,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <!-- Lightweight Charts Library -->
+    <script src="https://unpkg.com/lightweight-charts@4.1.5/dist/lightweight-charts.standalone.production.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
@@ -48,6 +50,8 @@
         .toast-info { background: #6366f1; }
         .auto-track-badge { background: rgba(16,185,129,0.2); border: 1px solid rgba(16,185,129,0.3); border-radius: 20px; padding: 4px 10px; font-size: 9px; color: #10b981; display: inline-flex; align-items: center; gap: 4px; }
         .theme-toggle { width: 40px; height: 40px; border-radius: 20px; background: var(--bg-card); border: 1px solid var(--border-subtle); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .timeframe-btn { background: var(--bg-secondary); border: 1px solid var(--border-subtle); cursor: pointer; transition: all 0.2s; }
+        .timeframe-btn:hover { background: var(--accent-primary); border-color: var(--accent-primary); }
     </style>
 </head>
 <body>
@@ -69,25 +73,23 @@
             <p class="text-[8px] text-slate-500 mt-1">Get free from <a href="https://aistudio.google.com" target="_blank" class="text-indigo-400">aistudio.google.com</a></p>
         </div>
         <div class="grid grid-cols-2 gap-3">
-            <div><label class="text-[10px] font-bold text-slate-400">💰 BALANCE ($)</label><input type="number" id="balance" class="input-dark mt-1" value="10000"></div>
+            <div><label class="text-[10px] font-bold text-slate-400">💰 BALANCE ($)</label><input type="number" id="balance" class="input-dark mt-1" value="7200"></div>
             <div><label class="text-[10px] font-bold text-slate-400">⚠️ RISK %</label><input type="number" id="riskPercent" class="input-dark mt-1" value="1.0" step="0.1"></div>
         </div>
         <div>
             <label class="text-[10px] font-bold text-slate-400">🎯 TRADING MODE</label>
             <select id="modeSelect" class="input-dark mt-1">
-                <option value="scalp">⚡ SCALPING (1:1.5 - 1:4 RR)</option>
+                <option value="scalp">⚡ SCALPING (1:2 - 1:4 RR)</option>
                 <option value="day">📊 DAY TRADING (1:4 - 1:12 RR)</option>
             </select>
         </div>
         <div>
             <label class="text-[10px] font-bold text-slate-400">🤖 AUTO PRICE TRACKING</label>
             <select id="autoTrackSelect" class="input-dark mt-1">
-                <option value="on">✅ ON - Auto detect TP/SL hits (uses cached data, no extra API calls)</option>
+                <option value="on">✅ ON - Auto detect TP/SL hits</option>
                 <option value="off">⏸️ OFF - Manual feedback only</option>
             </select>
         </div>
-       
-        
         <button id="saveSettings" class="btn text-sm py-3">SAVE & SECURE</button>
     </div>
 </div>
@@ -103,6 +105,28 @@
         <div class="flex gap-2">
             <button id="themeToggle" class="theme-toggle"><i class="fa-solid fa-moon"></i></button>
             <button id="settingsBtn" class="w-10 h-10 bg-white/5 rounded-xl"><i class="fa-solid fa-sliders-h"></i></button>
+        </div>
+    </div>
+
+    <!-- CHART SECTION -->
+    <div class="card mb-4">
+        <div class="flex justify-between items-center mb-3">
+            <h3 class="text-sm font-black">📈 LIVE CHART</h3>
+            <select id="chartSymbolSelect" class="bg-black/30 text-xs px-2 py-1 rounded border border-slate-700">
+                <option value="XAUUSD">🪙 GOLD</option>
+                <option value="XAGUSD">🥈 SILVER</option>
+                <option value="BTCUSD">₿ BITCOIN</option>
+                <option value="ETHUSD">Ξ ETHEREUM</option>
+                <option value="EURUSD">💶 EUR/USD</option>
+                <option value="GBPUSD">💷 GBP/USD</option>
+                <option value="SOLUSD">◎ SOLANA</option>
+            </select>
+        </div>
+        <div id="chart-container" style="width: 100%; height: 400px;"></div>
+        <div class="flex gap-2 mt-3 justify-center">
+            <button class="timeframe-btn px-3 py-1 rounded text-xs" data-interval="1">1m</button>
+            <button class="timeframe-btn px-3 py-1 rounded text-xs bg-indigo-600" data-interval="5">5m</button>
+            <button class="timeframe-btn px-3 py-1 rounded text-xs" data-interval="15">15m</button>
         </div>
     </div>
 
@@ -122,6 +146,7 @@
                 <optgroup label="Cryptocurrencies">
                     <option value="BTCUSD">₿ BTC/USD</option>
                     <option value="ETHUSD">Ξ ETH/USD</option>
+                    <option value="SOLUSD">◎ SOL/USD</option>
                 </optgroup>
             </select>
             <button id="analyzeBtn" class="bg-indigo-600 px-4 rounded-xl font-bold text-sm">GO</button>
@@ -194,10 +219,10 @@
 </div>
 
 <script src="app.js"></script>
-<script src="feedback.js"></script>
 <script src="market-data.js"></script>
 <script src="strategy-engine.js"></script>
 <script src="risk-manager.js"></script>
+<script src="chart.js"></script>
 <div id="errorLog" style="position:fixed; bottom:0; left:0; right:0; background:#1a1a2e; border-top:2px solid #ff4466; color:#ff4466; font-size:10px; padding:8px; max-height:120px; overflow-y:auto; z-index:10000; display:none; font-family:monospace;"></div>
 <script>
     window.onerror = function(message, source, lineno, colno, error) {
