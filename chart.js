@@ -8,6 +8,13 @@ let currentInterval = '5';
 document.addEventListener('DOMContentLoaded', () => {
     initChart();
     attachEventListeners();
+    
+    // Auto-refresh every 2 minutes
+    setInterval(() => {
+        if (typeof loadChartData === 'function') {
+            loadChartData();
+        }
+    }, 120000);
 });
 
 function initChart() {
