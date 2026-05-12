@@ -285,7 +285,7 @@ function init() {
     elements.themeToggle.addEventListener('click', toggleTheme);
     elements.symbolSelect.addEventListener('change', analyze);
     
-    // Chart symbol selector
+    // Chart symbol selector listener
     const chartSymbolSelect = document.getElementById('chartSymbolSelect');
     if (chartSymbolSelect) {
         chartSymbolSelect.addEventListener('change', (e) => {
