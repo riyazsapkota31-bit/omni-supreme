@@ -83,13 +83,16 @@ const StrategyEngine = {
         if (trend === 'BEARISH') sellScore += 15;
 
         let bias = 'WAIT', confidence = 50;
-        if (buyScore > 80 && buyScore > sellScore) {
+        
+        // ========== THRESHOLD CHANGED FROM 120 TO 90 ==========
+        if (buyScore > 90 && buyScore > sellScore) {
             bias = 'BUY';
             confidence = Math.min(85, 50 + Math.floor(buyScore / 3));
-        } else if (sellScore > 80 && sellScore > buyScore) {
+        } else if (sellScore > 90 && sellScore > buyScore) {
             bias = 'SELL';
             confidence = Math.min(85, 50 + Math.floor(sellScore / 3));
         }
+        
         const minConf = (mode === 'scalp') ? 55 : 65;
         if (confidence < minConf) { bias = 'WAIT'; confidence = 50; }
 
