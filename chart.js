@@ -1,4 +1,4 @@
-// chart.js – Lightweight Charts without .clear()
+// chart.js – Live candlestick chart with auto-refresh
 
 let chartInstance = null;
 let candleSeriesInstance = null;
@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initChart();
     attachEventListeners();
     
-    // Auto-refresh every 2 minutes
+    // Auto-refresh every 2 minutes (120000 ms)
     setInterval(() => {
         if (typeof loadChartData === 'function') {
             loadChartData();
@@ -24,7 +24,6 @@ function initChart() {
         return;
     }
 
-    // Destroy existing instance
     if (chartInstance) {
         chartInstance.remove();
         chartInstance = null;
@@ -160,6 +159,6 @@ function renderChart(data) {
     chartInstance.timeScale().fitContent();
 }
 
-// Expose for external calls if needed
+// Expose for external calls
 window.loadChartData = loadChartData;
 window.initChart = initChart;
