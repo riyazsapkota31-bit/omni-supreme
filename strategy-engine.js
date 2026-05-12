@@ -1,3 +1,5 @@
+// strategy-engine.js – Full Smart Money System (BOS/CHoCH, Order Blocks, OTE, Session Timing, Liquidity Sweep, FVG)
+
 const StrategyEngine = {
     marketFilters: {
         isHighImpactNews: (ts) => { const h = new Date(ts).getUTCHours(); return (h>=8 && h<=10) || (h>=13 && h<=15); },
@@ -11,24 +13,139 @@ const StrategyEngine = {
         isChoppy: (d) => Math.abs(d.ema20 - d.ema50) / d.currentPrice < 0.001
     },
 
-    // Smart Money: Liquidity Sweep Detection
-    detectLiquiditySweep(data) {
-        const candles = data.candles || [];
+    // ========== SESSION TIMING ==========
+    getCurrentSession() {
+        const now = new Date();
+        const utcHour = now.getUTCHours();
+        
+        // London Session: 7:00 - 16:00 UTC
+        if (utcHour >= 7 && utcHour < 16) return 'LONDON';
+        // New York Session: 12:00 - 20:00 UTC
+        if (utcHour >= 12 && utcHour < 20) return 'NEW_YORK';
+        // Tokyo Session: 23:00 - 8:00 UTC
+        if (utcHour >= 23 || utcHour < 8) return 'TOKYO';
+        // Asian Session: 23:00 - 7:00 UTC
+        if (utcHour >= 0 && utcHour < 7) return 'ASIAN';
+        return 'OFF_HOURS';
+    },
+
+    // ========== MARKET STRUCTURE (BOS/CHoCH) ==========
+    detectMarketStructure(candles) {
+        if (!candles || candles.length < 20) return { structure: 'UNKNOWN', bos: null, choch: null };
+        
+        // Find swing highs and lows
+        const swingHighs = [];
+        const swingLows = [];
+        
+        for (let i = 5; i < candles.length - 5; i++) {
+            const isSwingHigh = candles[i].high > candles[i-1].high && candles[i].high > candles[i-2].high &&
+                                candles[i].high > candles[i+1].high && candles[i].high > candles[i+2].high;
+            const isSwingLow = candles[i].low < candles[i-1].low && candles[i].low < candles[i-2].low &&
+                               candles[i].low < candles[i+1].low && candles[i].low < candles[i+2].low;
+            
+            if (isSwingHigh) swingHighs.push({ index: i, price: candles[i].high });
+            if (isSwingLow) swingLows.push({ index: i, price: candles[i].low });
+        }
+        
+        if (swingHighs.length < 2 || swingLows.length < 2) return { structure: 'UNKNOWN', bos: null, choch: null };
+        
+        const lastSwingHigh = swingHighs[swingHighs.length - 1];
+        const prevSwingHigh = swingHighs[swingHighs.length - 2];
+        const lastSwingLow = swingLows[swingLows.length - 1];
+        const prevSwingLow = swingLows[swingLows.length - 2];
+        
+        // Detect BOS (Break of Structure)
+        let bos = null;
+        let choch = null;
+        
+        // Bullish BOS: price breaks above previous swing high
+        if (lastSwingHigh.price > prevSwingHigh.price) {
+            bos = { direction: 'BULLISH', price: lastSwingHigh.price };
+        }
+        // Bearish BOS: price breaks below previous swing low
+        if (lastSwingLow.price < prevSwingLow.price) {
+            bos = { direction: 'BEARISH', price: lastSwingLow.price };
+        }
+        
+        // Detect CHoCH (Change of Character) - when BOS happens after trend change
+        const lastCandle = candles[candles.length - 1];
+        if (bos && bos.direction === 'BULLISH' && lastCandle.close > prevSwingHigh.price) {
+            choch = { direction: 'BULLISH_CHOCH', price: lastCandle.close };
+        }
+        if (bos && bos.direction === 'BEARISH' && lastCandle.close < prevSwingLow.price) {
+            choch = { direction: 'BEARISH_CHOCH', price: lastCandle.close };
+        }
+        
+        return { structure: bos ? (bos.direction === 'BULLISH' ? 'UPTREND' : 'DOWNTREND') : 'CONSOLIDATION', bos, choch };
+    },
+
+    // ========== ORDER BLOCKS ==========
+    detectOrderBlock(candles) {
         if (!candles || candles.length < 3) return { signal: null, strength: 0 };
         
         const lastCandle = candles[candles.length - 1];
-        const recentHighs = Math.max(...candles.slice(-20).map(c => c.high));
-        const recentLows = Math.min(...candles.slice(-20).map(c => c.low));
+        const prevCandle = candles[candles.length - 2];
+        const prevPrevCandle = candles[candles.length - 3];
         
-        const upperSweep = lastCandle.high > recentHighs && lastCandle.close < recentHighs;
-        const lowerSweep = lastCandle.low < recentLows && lastCandle.close > recentLows;
+        // Bullish Order Block: Last bearish candle before a strong bullish move
+        const isBullishOB = prevCandle.close < prevCandle.open && // Bearish candle
+                            lastCandle.close > lastCandle.open && // Current candle bullish
+                            lastCandle.close > prevCandle.high; // Strong move up
         
-        if (upperSweep) return { signal: 'SELL', strength: 70, reason: 'Liquidity sweep (upper)' };
-        if (lowerSweep) return { signal: 'BUY', strength: 70, reason: 'Liquidity sweep (lower)' };
+        // Bearish Order Block: Last bullish candle before a strong bearish move
+        const isBearishOB = prevCandle.close > prevCandle.open && // Bullish candle
+                            lastCandle.close < lastCandle.open && // Current candle bearish
+                            lastCandle.close < prevCandle.low; // Strong move down
+        
+        if (isBullishOB) {
+            const entry = prevCandle.low;
+            return { signal: 'BUY', strength: 72, reason: 'Order Block (bullish)', entry, stopLoss: entry - (prevCandle.high - prevCandle.low) };
+        }
+        if (isBearishOB) {
+            const entry = prevCandle.high;
+            return { signal: 'SELL', strength: 72, reason: 'Order Block (bearish)', entry, stopLoss: entry + (prevCandle.high - prevCandle.low) };
+        }
+        
         return { signal: null, strength: 0 };
     },
 
-    // Smart Money: Fair Value Gap Detection
+    // ========== OPTIMAL TRADE ENTRY (OTE) - Fibonacci Retracement ==========
+    calculateOTE(swingHigh, swingLow, currentPrice) {
+        const range = swingHigh - swingLow;
+        const fib618 = swingLow + range * 0.618;
+        const fib705 = swingLow + range * 0.705;
+        const fib382 = swingHigh - range * 0.382;
+        const fib50 = swingHigh - range * 0.5;
+        
+        // Bullish OTE: price retraced to 61.8%-70.5% of bullish move
+        const isBullishOTE = currentPrice >= fib618 && currentPrice <= fib705;
+        // Bearish OTE: price retraced to 38.2%-50% of bearish move
+        const isBearishOTE = currentPrice <= fib382 && currentPrice >= fib50;
+        
+        return { bullish: isBullishOTE, bearish: isBearishOTE, fib618, fib705, fib382, fib50 };
+    },
+
+    // ========== LIQUIDITY SWEEP ==========
+    detectLiquiditySweep(data) {
+        const candles = data.candles || [];
+        if (!candles || candles.length < 5) return { signal: null, strength: 0 };
+        
+        const lastCandle = candles[candles.length - 1];
+        const prevCandle = candles[candles.length - 2];
+        const recentHighs = Math.max(...candles.slice(-20).map(c => c.high));
+        const recentLows = Math.min(...candles.slice(-20).map(c => c.low));
+        
+        // Upper sweep (stop hunt) - bullish reversal
+        const upperSweep = lastCandle.high > recentHighs && lastCandle.close < recentHighs && lastCandle.close > prevCandle.close;
+        // Lower sweep (stop hunt) - bearish reversal
+        const lowerSweep = lastCandle.low < recentLows && lastCandle.close > recentLows && lastCandle.close < prevCandle.close;
+        
+        if (lowerSweep) return { signal: 'BUY', strength: 70, reason: 'Liquidity sweep (bullish reversal)' };
+        if (upperSweep) return { signal: 'SELL', strength: 70, reason: 'Liquidity sweep (bearish reversal)' };
+        return { signal: null, strength: 0 };
+    },
+
+    // ========== FAIR VALUE GAP (FVG) ==========
     detectFairValueGap(data) {
         const candles = data.candles || [];
         if (!candles || candles.length < 3) return { signal: null, strength: 0 };
@@ -37,7 +154,9 @@ const StrategyEngine = {
         const c2 = candles[candles.length - 2];
         const c3 = candles[candles.length - 1];
         
+        // Bullish FVG: Gap between c1 high and c3 low
         const bullishFVG = c1.high < c3.low && c2.close > c1.high;
+        // Bearish FVG: Gap between c3 high and c1 low
         const bearishFVG = c3.high < c1.low && c2.close < c1.low;
         
         if (bullishFVG) return { signal: 'BUY', strength: 65, reason: 'Fair Value Gap (bullish)' };
@@ -45,7 +164,7 @@ const StrategyEngine = {
         return { signal: null, strength: 0 };
     },
 
-    // Smart Money: Break & Retest Detection
+    // ========== BREAK & RETEST ==========
     detectBreakRetest(data) {
         const { currentPrice, support, resistance, candles } = data;
         if (!candles || candles.length < 5) return { signal: null, strength: 0 };
@@ -61,6 +180,7 @@ const StrategyEngine = {
         return { signal: null, strength: 0 };
     },
 
+    // ========== ORIGINAL STRATEGIES ==========
     detectRSIDivergence(data) {
         const { rsi, currentPrice, prevPrice } = data;
         const priceHigher = currentPrice > prevPrice;
@@ -127,6 +247,26 @@ const StrategyEngine = {
         const recentHighs = candles.length >= 20 ? Math.max(...candles.slice(-20).map(c => c.high)) : marketData.resistance;
         const recentLows = candles.length >= 20 ? Math.min(...candles.slice(-20).map(c => c.low)) : marketData.support;
 
+        // Detect market structure (BOS/CHoCH)
+        const marketStructure = this.detectMarketStructure(candles);
+        
+        // Detect Order Block
+        const orderBlock = this.detectOrderBlock(candles);
+        
+        // Detect OTE (Fibonacci)
+        let oteSignal = null;
+        if (candles.length >= 20) {
+            const swingHigh = recentHighs;
+            const swingLow = recentLows;
+            const ote = this.calculateOTE(swingHigh, swingLow, marketData.currentPrice);
+            if (ote.bullish) oteSignal = { signal: 'BUY', strength: 55, reason: 'OTE (61.8-70.5% retracement)' };
+            if (ote.bearish) oteSignal = { signal: 'SELL', strength: 55, reason: 'OTE (38.2-50% retracement)' };
+        }
+        
+        // Get current session
+        const currentSession = this.getCurrentSession();
+        const sessionBonus = (currentSession === 'LONDON' || currentSession === 'NEW_YORK') ? 10 : 0;
+        
         const extendedData = {
             ...marketData,
             candles,
@@ -142,14 +282,31 @@ const StrategyEngine = {
             this.detectFVG(extendedData),
             this.detectLiquiditySweep(extendedData),
             this.detectFairValueGap(extendedData),
-            this.detectBreakRetest(extendedData)
+            this.detectBreakRetest(extendedData),
+            orderBlock,
+            oteSignal
         ];
         
         let buyScore = 0, sellScore = 0, reasons = [];
-        for (const s of signals) {
-            if (s.signal === 'BUY') { buyScore += s.strength; reasons.push(s.reason); }
-            else if (s.signal === 'SELL') { sellScore += s.strength; reasons.push(s.reason); }
+        
+        // Add market structure bonus
+        if (marketStructure.bos) {
+            if (marketStructure.bos.direction === 'BULLISH') { buyScore += 15; reasons.push(`BOS (${marketStructure.bos.price.toFixed(2)})`); }
+            if (marketStructure.bos.direction === 'BEARISH') { sellScore += 15; reasons.push(`BOS (${marketStructure.bos.price.toFixed(2)})`); }
         }
+        if (marketStructure.choch) {
+            if (marketStructure.choch.direction === 'BULLISH_CHOCH') { buyScore += 20; reasons.push('CHoCH (bullish)'); }
+            if (marketStructure.choch.direction === 'BEARISH_CHOCH') { sellScore += 20; reasons.push('CHoCH (bearish)'); }
+        }
+        
+        for (const s of signals) {
+            if (s && s.signal === 'BUY') { buyScore += s.strength; if (s.reason) reasons.push(s.reason); }
+            else if (s && s.signal === 'SELL') { sellScore += s.strength; if (s.reason) reasons.push(s.reason); }
+        }
+        
+        // Add session bonus
+        buyScore += sessionBonus;
+        sellScore += sessionBonus;
         
         const trend = this.marketFilters.getTrend(marketData);
         if (trend === 'BULLISH') buyScore += 15;
@@ -176,6 +333,8 @@ const StrategyEngine = {
                 confidence = 40;
             }
         }
-        return { bias, confidence, primaryStrategy: (bias!=='WAIT')?reasons.slice(0,2).join('+'):'No confluence', reasons };
+        
+        const uniqueReasons = [...new Set(reasons)];
+        return { bias, confidence, primaryStrategy: (bias!=='WAIT')?uniqueReasons.slice(0,3).join('+'):'No confluence', reasons: uniqueReasons };
     }
 };
