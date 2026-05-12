@@ -1,13 +1,20 @@
-// chart.js – Live candlestick chart with timeframe switching
+// chart.js – Live candlestick chart with timeframe switching (FIXED)
 
 let chart = null;
 let currentChartSymbol = 'XAUUSD';
 let currentInterval = '5';
 let candleData = [];
+let candleSeries = null;
 
 async function initChart() {
     const container = document.getElementById('chart-container');
     if (!container) return;
+    
+    // Clear existing chart if any
+    if (chart) {
+        chart.remove();
+        chart = null;
+    }
     
     chart = LightweightCharts.createChart(container, {
         width: container.clientWidth,
@@ -23,16 +30,6 @@ async function initChart() {
         crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
         rightPriceScale: { borderColor: '#2a2e38' },
         timeScale: { borderColor: '#2a2e38', timeVisible: true, secondsVisible: false },
-    });
-    
-    // Add timeframe button listeners
-    document.querySelectorAll('.timeframe-btn').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-            document.querySelectorAll('.timeframe-btn').forEach(b => b.classList.remove('bg-indigo-600'));
-            e.target.classList.add('bg-indigo-600');
-            currentInterval = e.target.dataset.interval;
-            await loadChartData();
-        });
     });
     
     await loadChartData();
@@ -107,9 +104,12 @@ function aggregateCandles(candles, minutes) {
 function renderChart() {
     if (!chart) return;
     
-    chart.clear();
+    // Remove existing series if any
+    if (candleSeries) {
+        chart.removeSeries(candleSeries);
+    }
     
-    const candleSeries = chart.addSeries(LightweightCharts.CandlestickSeries, {
+    candleSeries = chart.addSeries(LightweightCharts.CandlestickSeries, {
         upColor: '#00ff88',
         downColor: '#ff4466',
         borderVisible: false,
@@ -121,6 +121,22 @@ function renderChart() {
     chart.timeScale().fitContent();
 }
 
+// Add timeframe button listeners
+document.addEventListener('DOMContentLoaded', () => {
+    // Wait for buttons to exist
+    setTimeout(() => {
+        document.querySelectorAll('.timeframe-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                document.querySelectorAll('.timeframe-btn').forEach(b => b.classList.remove('bg-indigo-600'));
+                e.target.classList.add('bg-indigo-600');
+                currentInterval = e.target.dataset.interval;
+                await loadChartData();
+            });
+        });
+    }, 500);
+});
+
+// Resize handler
 window.addEventListener('resize', () => {
     if (chart) {
         const container = document.getElementById('chart-container');
