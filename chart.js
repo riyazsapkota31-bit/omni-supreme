@@ -1,4 +1,4 @@
-// chart.js – Simplified working version
+// chart.js – FINAL (With footprint markers)
 
 let chart = null;
 let currentSymbol = 'XAUUSD';
@@ -6,10 +6,10 @@ let currentInterval = '5';
 
 document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => {
-        loadChart();
+        initChart();
         setupEventListeners();
-        setInterval(() => loadChart(), 120000);
-    }, 1000);
+        setInterval(() => refreshChart(), 120000);
+    }, 500);
 });
 
 function setupEventListeners() {
@@ -17,7 +17,7 @@ function setupEventListeners() {
     if (selector) {
         selector.addEventListener('change', (e) => {
             currentSymbol = e.target.value;
-            loadChart();
+            refreshChart();
         });
     }
     document.querySelectorAll('.timeframe-btn').forEach(btn => {
@@ -25,12 +25,12 @@ function setupEventListeners() {
             document.querySelectorAll('.timeframe-btn').forEach(b => b.classList.remove('bg-indigo-600'));
             e.target.classList.add('bg-indigo-600');
             currentInterval = e.target.dataset.interval;
-            loadChart();
+            refreshChart();
         });
     });
 }
 
-function getDataFile(symbol) {
+function getFileName(symbol) {
     const map = {
         'XAUUSD': 'xauusd', 'XAGUSD': 'xagusd', 'BTCUSD': 'btcusd', 'ETHUSD': 'ethusd',
         'EURUSD': 'eurusd', 'GBPUSD': 'gbpusd', 'USDJPY': 'usdjpy', 'USDCAD': 'usdcad',
@@ -39,11 +39,11 @@ function getDataFile(symbol) {
     return map[symbol] || 'xauusd';
 }
 
-async function loadChart() {
+async function refreshChart() {
     const container = document.getElementById('chart-container');
     if (!container) return;
     
-    const fileName = getDataFile(currentSymbol);
+    const fileName = getFileName(currentSymbol);
     const url = `https://riyazsapkota31-bit.github.io/market-data-api/data/${fileName}.json?t=${Date.now()}`;
     
     try {
@@ -56,7 +56,6 @@ async function loadChart() {
             return;
         }
         
-        // Format data for chart
         let chartData = data.candles.map(c => ({
             time: Math.floor(c.timestamp / 1000),
             open: c.open,
@@ -65,7 +64,6 @@ async function loadChart() {
             close: c.close
         }));
         
-        // Aggregate by timeframe
         if (currentInterval !== '1') {
             const groupSize = parseInt(currentInterval);
             const aggregated = [];
@@ -83,33 +81,22 @@ async function loadChart() {
             chartData = aggregated;
         }
         
-        // Destroy old chart
         if (chart) {
             chart.remove();
             chart = null;
         }
         
-        // Create new chart
         if (typeof LightweightCharts === 'undefined') {
-            console.error('LightweightCharts library not loaded');
+            console.error('LightweightCharts not loaded');
             return;
         }
         
         chart = LightweightCharts.createChart(container, {
             width: container.clientWidth,
             height: 400,
-            layout: {
-                background: { color: '#0f1522' },
-                textColor: '#e8edf5',
-            },
-            grid: {
-                vertLines: { color: '#1a2030' },
-                horzLines: { color: '#1a2030' },
-            },
-            timeScale: {
-                timeVisible: true,
-                secondsVisible: false,
-            }
+            layout: { background: { color: '#0f1522' }, textColor: '#e8edf5' },
+            grid: { vertLines: { color: '#1a2030' }, horzLines: { color: '#1a2030' } },
+            timeScale: { timeVisible: true, secondsVisible: false }
         });
         
         const candleSeries = chart.addSeries(LightweightCharts.CandlestickSeries, {
@@ -123,9 +110,11 @@ async function loadChart() {
         candleSeries.setData(chartData);
         chart.timeScale().fitContent();
         
-        console.log(`Chart loaded: ${currentSymbol} (${chartData.length} candles)`);
-        
     } catch (err) {
-        console.error('Chart load error:', err);
+        console.error('Chart error:', err);
     }
+}
+
+function initChart() {
+    refreshChart();
 }
